@@ -43,6 +43,22 @@ public sealed class BatchTests
     }
 
     [Fact]
+    public void The_same_title_in_another_region_is_added_but_flagged()
+    {
+        var canvas = new Sandbox();
+        canvas.Run(Mcp, Note("Log replication", "Log matching property"));
+        var existing = canvas.Card("Log matching property").Id;
+
+        var result = canvas.Run(Mcp, Note("Safety", "Log Matching Property"));
+
+        Assert.Equal(2, canvas.State.Cards.Count);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Contains(existing, warning);
+        Assert.Contains("region 'Log replication'", warning);
+        Assert.Contains("mergeCards", warning);
+    }
+
+    [Fact]
     public void A_failing_intent_rejects_the_whole_batch()
     {
         var canvas = new Sandbox();

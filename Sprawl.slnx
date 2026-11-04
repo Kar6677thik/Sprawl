@@ -3,9 +3,11 @@
     <Project Path="src/Sprawl.Contracts/Sprawl.Contracts.csproj" />
     <Project Path="src/Sprawl.Domain/Sprawl.Domain.csproj" />
     <Project Path="src/Sprawl.Api/Sprawl.Api.csproj" />
+    <Project Path="src/Sprawl.Mcp/Sprawl.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sprawl.Domain.Tests/Sprawl.Domain.Tests.csproj" />
     <Project Path="tests/Sprawl.Api.Tests/Sprawl.Api.Tests.csproj" />
+    <Project Path="tests/Sprawl.Mcp.Tests/Sprawl.Mcp.Tests.csproj" />
   </Folder>
 </Solution>

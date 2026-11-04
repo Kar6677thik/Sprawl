@@ -34,6 +34,7 @@ public sealed partial class BatchEngine
     private readonly LayoutEngine layout;
     private readonly Dictionary<string, string> refs = new(StringComparer.Ordinal);
     private readonly List<SkippedItem> skipped = [];
+    private readonly List<string> notes = [];
     private int index;
 
     private BatchEngine(CanvasState original, BatchRequest request, Actor actor, DateTimeOffset now, IIdGenerator ids)
@@ -88,7 +89,7 @@ public sealed partial class BatchEngine
         if (state.Regions.Count > Limits.RegionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.RegionsPerCanvas} regions.");
         if (state.Connections.Count > Limits.ConnectionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.ConnectionsPerCanvas} connections.");
         var ops = StateOps.Diff(original, state);
-        return new(ops, refs, skipped, layout.Warnings, Summaries.Describe(ops, original, state, kind));
+        return new(ops, refs, skipped, [.. notes, .. layout.Warnings], Summaries.Describe(ops, original, state, kind));
     }
 
     private static string Describe(Intent intent) => intent.GetType().Name.Replace("Intent", "", StringComparison.Ordinal);
@@ -321,6 +322,13 @@ public sealed partial class BatchEngine
         }
         layout.Touch(id);
         MapRef(add.Ref, id);
+        // Duplicates are skipped only within a region; elsewhere on the canvas the same title is allowed but flagged,
+        // so a caller that read a single region learns about it (and can merge with reorganize/mergeCards).
+        if (state.Cards.Values.FirstOrDefault(other => other.Id != id && other.RegionId != region?.Id && Text.SameTitle(other.Title, title)) is { } twin)
+        {
+            var where = twin.RegionId is { } twinRegion && state.Regions.TryGetValue(twinRegion, out var r) ? $"region '{r.Title}'" : "the open canvas";
+            notes.Add($"'{title}' ({id}) has the same title as {twin.Id} in {where}; if they are the same idea, merge them with reorganize mergeCards.");
+        }
     }
 
     private void UpdateCard(UpdateCardIntent update)
