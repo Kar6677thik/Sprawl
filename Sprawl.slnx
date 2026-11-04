@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sprawl.Contracts/Sprawl.Contracts.csproj" />
+    <Project Path="src/Sprawl.Domain/Sprawl.Domain.csproj" />
+    <Project Path="src/Sprawl.Api/Sprawl.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sprawl.Domain.Tests/Sprawl.Domain.Tests.csproj" />
+    <Project Path="tests/Sprawl.Api.Tests/Sprawl.Api.Tests.csproj" />
+  </Folder>
+</Solution>

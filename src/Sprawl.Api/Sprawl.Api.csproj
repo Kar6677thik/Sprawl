@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Sprawl.Api</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <ProjectReference Include="../Sprawl.Domain/Sprawl.Domain.csproj" />
+    <ProjectReference Include="../Sprawl.Contracts/Sprawl.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/Migrations/*.sql" />
+    <!-- The sample canvas seeded into an empty Development database. -->
+    <None Include="../../samples/seed/*.json" Link="Seed/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

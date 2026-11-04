@@ -1,0 +1,27 @@
+{
+  "title": "Raft consensus",
+  "description": "How Raft keeps a replicated log consistent: elections, replication, safety. Notes from the paper and the TLA+ spec.",
+  "tags": ["distributed-systems", "papers"],
+  "collection": "Learning",
+  "requestId": "sample-raft-v1",
+  "intents": [
+    { "type": "addRegion", "ref": "election", "title": "Leader election" },
+    { "type": "addCard", "ref": "timeouts", "region": "election", "kind": "idea", "title": "Randomized election timeouts", "body": "Each follower waits a random 150–300 ms before standing as a candidate, so split votes are rare and resolve quickly." },
+    { "type": "addCard", "ref": "terms", "region": "election", "kind": "note", "title": "Terms are logical clocks", "body": "Every message carries the sender's term. A server that sees a higher term steps down to follower and adopts it; stale leaders discover they are stale on their next RPC." },
+    { "type": "addCard", "ref": "split", "region": "election", "kind": "question", "title": "What happens on a split vote in a four-node cluster?" },
+    { "type": "addRegion", "ref": "log", "title": "Log replication" },
+    { "type": "addCard", "ref": "append", "region": "log", "kind": "idea", "title": "AppendEntries doubles as the heartbeat", "body": "Empty AppendEntries keep followers from timing out; the same RPC carries new entries plus the index and term of the entry before them." },
+    { "type": "addCard", "ref": "matching", "region": "log", "kind": "note", "title": "Log matching property", "body": "If two logs contain an entry with the same index and term, the logs are identical up to that index. The consistency check in AppendEntries maintains it inductively." },
+    { "type": "addCard", "ref": "commit", "region": "log", "kind": "idea", "title": "Commit = replicated on a majority in the current term", "body": "A leader only counts replicas for entries from its own term; older entries commit indirectly." },
+    { "type": "addRegion", "ref": "safety", "title": "Safety" },
+    { "type": "addCard", "ref": "completeness", "region": "safety", "kind": "note", "title": "Leader completeness", "body": "Voters refuse candidates whose log is less up-to-date (compare last term, then length), so any elected leader holds every committed entry." },
+    { "type": "addCard", "ref": "figure8", "region": "safety", "kind": "question", "title": "Why can't a leader commit an old-term entry by counting replicas? (Figure 8)" },
+    { "type": "addCard", "ref": "paper", "region": "safety", "kind": "link", "title": "In Search of an Understandable Consensus Algorithm", "url": "https://raft.github.io/raft.pdf", "body": "Ongaro & Ousterhout, 2014. Sections 5.2–5.4 cover election, replication and safety." },
+    { "type": "addCard", "ref": "vote", "region": "safety", "kind": "code", "title": "Up-to-date check", "language": "go", "body": "func upToDate(lastTerm, lastIndex, myTerm, myIndex int) bool {\n\tif lastTerm != myTerm {\n\t\treturn lastTerm > myTerm\n\t}\n\treturn lastIndex >= myIndex\n}" },
+    { "type": "connect", "from": "timeouts", "to": "split", "kind": "leads-to", "label": "rare, not impossible" },
+    { "type": "connect", "from": "terms", "to": "completeness", "kind": "relates" },
+    { "type": "connect", "from": "commit", "to": "figure8", "kind": "leads-to" },
+    { "type": "connect", "from": "vote", "to": "completeness", "kind": "example-of" },
+    { "type": "connect", "from": "matching", "to": "append", "kind": "depends-on" }
+  ]
+}

@@ -1,0 +1,25 @@
+# .NET build outputs and local IDE state
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Frontend dependencies and build output
+**/node_modules/
+**/dist/
+src/Sprawl.Api/wwwroot/
+
+# Test results
+**/coverage/
+TestResults/
+*.trx
+
+# Local credentials, tokens, databases and environment overrides
+.local/
+*.db
+*.db-shm
+*.db-wal
+*.pfx
+.env
