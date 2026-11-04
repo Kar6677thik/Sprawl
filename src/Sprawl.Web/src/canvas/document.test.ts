@@ -65,3 +65,15 @@ describe("moveLocally", () => {
     expect(moved.cards[0]).toBe(doc.cards[0]);
   });
 });
+
+describe("moveLocally into another container", () => {
+  it("reparents a card dropped into a region, and makes a card dropped on open canvas loose and manual", () => {
+    const doc = documentOf({ cards: [card("cd_00000001", "rg_00000001"), card("cd_00000002", "rg_00000001")] });
+    const moved = moveLocally(doc, [
+      { id: "cd_00000001", x: 30, y: 60, container: "rg_00000002" },
+      { id: "cd_00000002", x: -400, y: 10, container: "canvas", asAuto: true },
+    ]);
+    expect(moved.cards[0]).toMatchObject({ regionId: "rg_00000002", x: 30, y: 60, placement: "manual" });
+    expect(moved.cards[1]).toMatchObject({ regionId: null, placement: "manual" });
+  });
+});

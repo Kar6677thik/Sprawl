@@ -1,4 +1,4 @@
-import type { BatchRequest, BatchResult, CanvasDocument, CanvasSummary, Session } from "./types";
+import type { BatchRequest, BatchResult, CanvasDocument, CanvasSummary, HistoryEntry, SearchResult, Session } from "./types";
 
 /** A refused request, carrying the API's stable problem `code` (see ErrorCodes in Sprawl.Contracts). */
 export class ApiError extends Error {
@@ -47,6 +47,14 @@ export class SprawlClient {
 
   undo = (id: string, version: number) =>
     this.json<BatchResult>("POST", `/api/v1/canvases/${encodeURIComponent(id)}/batches/${version}/undo`);
+
+  revert = (id: string, toVersion: number, ifMatch: number) =>
+    this.json<BatchResult>("POST", `/api/v1/canvases/${encodeURIComponent(id)}/revert`, { toVersion }, ifMatch);
+
+  history = (id: string, limit = 100) => this.json<HistoryEntry[]>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/history?limit=${limit}`);
+
+  search = (q: string, canvas?: string) =>
+    this.json<SearchResult>("GET", `/api/v1/search?q=${encodeURIComponent(q)}${canvas ? `&canvas=${encodeURIComponent(canvas)}` : ""}&limit=30`);
 
   eventsUrl = (id: string) => `/api/v1/canvases/${encodeURIComponent(id)}/events`;
 

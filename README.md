@@ -2,7 +2,7 @@
 
 A minimalist infinite canvas, one per topic, that keeps growing over time. Each canvas is a living map of your thinking on one subject: regions of cards (ideas, notes, open questions, links, code) joined by labelled connections. Claude adds most of the content through an MCP server, and you edit directly in the UI. Every change goes into an operation log, so you can see how a canvas grew and revert it to any version.
 
-**Status: M1 done; M2 (web canvas) in progress.** The API, data model, deterministic placement, op log with undo and revert, live events and tests are built. The canvas UI renders, zooms semantically, updates live and saves drags; editing, the command palette and Tidy come next. The MCP server is M3. Design: [docs/01-design.md](docs/01-design.md).
+**Status: M1 and M2 done.** The API (data model, deterministic placement, op log with undo and revert, live events) and the web canvas (semantic zoom, live updates, editing, command palette, Tidy, history) are built. The MCP server is M3. In the canvas, press `?` for keyboard shortcuts. Design: [docs/01-design.md](docs/01-design.md).
 
 ## Start locally on Windows
 

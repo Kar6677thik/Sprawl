@@ -82,12 +82,24 @@ export function find(doc: CanvasDocument, id: string): Region | Card | Connectio
   }
 }
 
-/** Optimistically move items locally while the server confirms (the SSE event then replaces them with the truth). */
-export function moveLocally(doc: CanvasDocument, moves: { id: string; x: number; y: number }[]): CanvasDocument {
+/**
+ * Optimistically apply a drag locally while the server confirms (the SSE event then replaces it with the truth).
+ * A `container` moves a card into a region ("rg_…") or onto the open canvas ("canvas").
+ */
+export function moveLocally(doc: CanvasDocument, moves: { id: string; x: number; y: number; container?: string; asAuto?: boolean }[]): CanvasDocument {
   const byId = new Map(moves.map((m) => [m.id, m]));
+  const placement = (m: { asAuto?: boolean }) => (m.asAuto ? "auto" : "manual") as "auto" | "manual";
   return {
     ...doc,
-    regions: doc.regions.map((r) => (byId.has(r.id) ? { ...r, x: byId.get(r.id)!.x, y: byId.get(r.id)!.y, placement: "manual" } : r)),
-    cards: doc.cards.map((c) => (byId.has(c.id) ? { ...c, x: byId.get(c.id)!.x, y: byId.get(c.id)!.y, placement: "manual" } : c)),
+    regions: doc.regions.map((r) => {
+      const m = byId.get(r.id);
+      return m ? { ...r, x: m.x, y: m.y, placement: placement(m) } : r;
+    }),
+    cards: doc.cards.map((c) => {
+      const m = byId.get(c.id);
+      if (!m) return c;
+      const regionId = m.container === undefined ? c.regionId : m.container === "canvas" ? null : m.container;
+      return { ...c, x: m.x, y: m.y, regionId, placement: regionId === null ? "manual" : placement(m) };
+    }),
   };
 }

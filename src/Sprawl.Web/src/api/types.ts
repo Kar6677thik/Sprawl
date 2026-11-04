@@ -147,10 +147,12 @@ export interface LayoutItem {
 export type Intent =
   | { type: "addRegion"; title: string; ref?: string; parent?: string; tint?: string; near?: string }
   | { type: "addCard"; kind: CardKind; title: string; region?: string; ref?: string; body?: string; url?: string; language?: string; at?: { x: number; y: number } }
+  | { type: "moveCards"; ids: string[]; toRegion: string }
   | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string }
   | { type: "connect"; from: string; to: string; kind?: ConnectionKind; label?: string }
   | { type: "disconnect"; id?: string; from?: string; to?: string; kind?: ConnectionKind }
   | { type: "deleteCards"; ids: string[] }
+  | { type: "deleteRegion"; id: string }
   | { type: "updateRegion"; id: string; title?: string; tint?: string }
   | { type: "updateCanvas"; title?: string; description?: string; tags?: string[]; pinned?: boolean; archived?: boolean }
   | { type: "setLayout"; items: LayoutItem[] }
@@ -160,6 +162,34 @@ export interface BatchRequest {
   intents: Intent[];
   requestId?: string;
   kind?: "edit" | "tidy";
+}
+
+export interface HistoryEntry {
+  version: number;
+  kind: string;
+  actor: "owner" | "mcp";
+  client: string | null;
+  summary: string;
+  revertsTo: number | null;
+  undoes: number | null;
+  opCount: number;
+  createdAt: string;
+}
+
+export interface CardSearchHit {
+  canvasId: string;
+  canvasTitle: string;
+  cardId: string;
+  regionId: string | null;
+  regionTitle: string | null;
+  kind: CardKind;
+  title: string;
+  snippet: string;
+}
+
+export interface SearchResult {
+  canvases: { canvasId: string; title: string; snippet: string }[];
+  cards: CardSearchHit[];
 }
 
 export interface Session {

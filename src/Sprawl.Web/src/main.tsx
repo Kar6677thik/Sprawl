@@ -4,6 +4,7 @@ import "@fontsource-variable/inter";
 import "@xyflow/react/dist/base.css";
 import "./theme/tokens.css";
 import "./theme/app.css";
+import "./theme/panels.css";
 import { App } from "./App";
 import { applyTheme, readTheme } from "./theme/theme";
 

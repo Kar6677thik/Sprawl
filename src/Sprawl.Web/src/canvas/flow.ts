@@ -44,7 +44,7 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
     height: card.h,
     ...(card.regionId ? { parentId: card.regionId } : {}),
     data: { card, fresh: fresh.has(card.id) },
-    zIndex: 2,
+    zIndex: 3,
     hidden: far && card.regionId !== null,
   }));
   return [...regions, ...cards];
@@ -73,12 +73,13 @@ export function toEdges(connections: Connection[], level: ZoomLevel): Edge[] {
     id: connection.id,
     source: connection.sourceId,
     target: connection.targetId,
-    type: "default",
+    type: "floating",
     className: `edge-${connection.kind}`,
     ...(DIRECTIONAL.has(connection.kind) ? { markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 } } : {}),
     ...(level === "near" && connection.label ? { label: connection.label } : {}),
     data: { kind: connection.kind },
-    zIndex: 3,
+    // Layers (with zIndexMode="manual"): regions 0, sub-regions 1, edges 2, cards 3. Lines never cross card text.
+    zIndex: 2,
     selectable: true,
     focusable: true,
   }));

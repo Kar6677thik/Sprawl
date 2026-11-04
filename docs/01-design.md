@@ -605,26 +605,19 @@ As briefed: **M1** API + data model + placement + op log + tests → **M2** web 
 | Milestone | Status |
 |---|---|
 | M1 | **Done 4 Nov.** 36 domain tests (including randomized placement-invariant sessions) and 22 API tests. Smoke-tested through `scripts/start-local.ps1` in Windows PowerShell 5.1 |
-| M2 | **In progress.** Built:
-- the Vite/React 19/TypeScript 7 app served from the API's `wwwroot`
-- design tokens with light, dark and system themes
-- sign-in and the canvas list
-- the React Flow canvas at the server's layout
-- semantic zoom at three levels; zoomed out, each region is a labelled miniature
-- live SSE with gap detection and Claude's additions animated in with a toast
-- owner drag-to-place (optimistic, with replay after a 412)
-- 1/2/3, F and Shift+F keys
+| M2 | **Done 4 Nov.** Built:
+- the React Flow canvas at the server's layout, with semantic zoom (zoomed out, regions are labelled miniatures)
+- floating edges, layered beneath cards
+- live SSE, with Claude's additions animated in and a toast
+- drag-to-place, including dragging a card into another region or onto open canvas
+- quick-add (N / Shift+N) and the card panel (title, kind, URL, markdown body, key idea, connections, delete)
+- connect mode (C) and Delete, both with an undo toast
+- Ctrl+Z / Ctrl+Shift+Z (selective undo on the server)
+- Tidy (T, ELK in a pre-warmed worker, one undoable batch)
+- the Ctrl+K palette (actions, regions, cards, canvases), / and Ctrl+Shift+F search
+- the history panel (undo this, revert to here) and the ? shortcut sheet
 
-Checked with 19 Vitest tests and a headless Edge pass (sign-in, all zoom levels, live add, no console errors).
-
-**Remaining:**
-- the command palette (Ctrl+K) and search
-- quick-add and the card editing panel
-- connect mode
-- floating edges (they currently attach top to bottom and cross cards)
-- moving cards between regions by drag
-- Tidy (ELK) with undo, plus Ctrl+Z
-- the history list and the shortcut sheet |
+Checked with 33 Vitest tests and a 20-step headless Edge pass that uses real keyboard and mouse input |
 | M3–M6 | Not started |
 
 ### What M1 changed from this design
@@ -637,6 +630,7 @@ Checked with 19 Vitest tests and a headless Edge pass (sign-in, all zoom levels,
 - **Regions are always sized to their content.** Owner resizing of regions is deferred to M2, if it turns out to be wanted.
 - **Trash and restore are versioned batches with no ops,** so history shows them but revert never re-deletes or undeletes a canvas.
 - **Cross-site protection** uses the `X-Sprawl-Request: 1` header plus `Origin` and `Sec-Fetch-Site` checks, without an antiforgery token. The custom header forces a CORS preflight that no other origin can pass.
+- **Edges and nodes use manual z-ordering** (regions 0, sub-regions 1, edges 2, cards 3). React Flow otherwise lifts edges between nodes inside regions above the cards, and the lines cross card text.
 - **Local ports:** the UI listener is `https://localhost:7543` and the device listener is `http://127.0.0.1:7544`. In production they are 8080 and 8081, as in §7.
 
 ## 15. Open questions (with recommendations)
