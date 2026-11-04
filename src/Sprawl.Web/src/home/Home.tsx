@@ -1,0 +1,63 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { api } from "../api/client";
+import type { CanvasSummary } from "../api/types";
+import { navigate } from "../router";
+import { ThemeButton } from "../theme/ThemeButton";
+
+export function Home({ onSignOut }: { onSignOut: () => void }) {
+  const [canvases, setCanvases] = useState<CanvasSummary[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      api.listCanvases(query ? { q: query } : {}).then(setCanvases, (failure: Error) => setError(failure.message));
+    }, query ? 150 : 0);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    try {
+      const result = await api.createCanvas(title.trim());
+      navigate(`/c/${result.canvasId}`);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "The canvas could not be created.");
+    }
+  };
+
+  return (
+    <div className="home">
+      <header className="bar">
+        <h1 className="wordmark">Sprawl</h1>
+        <input className="search" type="search" placeholder="Filter canvases" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Filter canvases" />
+        <ThemeButton />
+        <button type="button" className="quiet" onClick={() => void api.signOut().then(onSignOut)}>Sign out</button>
+      </header>
+      <main className="home-main">
+        <form className="new-canvas" onSubmit={create}>
+          <input placeholder="New canvas: a topic to map" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="New canvas title" maxLength={120} />
+          <button type="submit" className="primary" disabled={!title.trim()}>Create</button>
+        </form>
+        {error && <p className="error" role="alert">{error}</p>}
+        {canvases && canvases.length === 0 && <p className="empty">{query ? "No canvases match." : "No canvases yet. Create one, or ask Claude to."}</p>}
+        <ul className="canvas-list">
+          {canvases?.map((canvas) => (
+            <li key={canvas.id}>
+              <a href={`/c/${canvas.id}`} onClick={(event) => { event.preventDefault(); navigate(`/c/${canvas.id}`); }}>
+                <span className="canvas-title">{canvas.pinned && <span className="pin" aria-label="Pinned" />}{canvas.title}</span>
+                {canvas.description && <span className="canvas-description">{canvas.description}</span>}
+                <span className="canvas-meta">
+                  {canvas.cardCount} cards · {canvas.regionCount} regions{canvas.openQuestions > 0 ? ` · ${canvas.openQuestions} open questions` : ""}
+                  {canvas.tags.length > 0 && <> · {canvas.tags.map((tag) => <span key={tag} className="tag">{tag}</span>)}</>}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </main>
+    </div>
+  );
+}

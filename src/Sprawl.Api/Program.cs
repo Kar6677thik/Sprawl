@@ -137,14 +137,16 @@ app.MapFallback("/api/{**path}", () => Results.Problem(statusCode: 404, detail: 
 // The built SPA (copied into wwwroot by scripts/build-local.ps1 and the Dockerfile). Absent until M2.
 if (File.Exists(Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html")))
 {
-    app.UseDefaultFiles();
-    app.UseStaticFiles(new StaticFileOptions
+    // Hashed assets are immutable; the shell must revalidate so a new release is picked up.
+    var spaFiles = new StaticFileOptions
     {
         OnPrepareResponse = context =>
             context.Context.Response.Headers.CacheControl = context.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
                 ? "no-cache" : "public, max-age=31536000, immutable"
-    });
-    app.MapFallbackToFile("index.html").AllowAnonymous();
+    };
+    app.UseDefaultFiles();
+    app.UseStaticFiles(spaFiles);
+    app.MapFallbackToFile("index.html", spaFiles).AllowAnonymous();
 }
 
 app.Run();

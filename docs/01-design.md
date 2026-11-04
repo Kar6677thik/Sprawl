@@ -605,7 +605,27 @@ As briefed: **M1** API + data model + placement + op log + tests → **M2** web 
 | Milestone | Status |
 |---|---|
 | M1 | **Done 4 Nov.** 36 domain tests (including randomized placement-invariant sessions) and 22 API tests. Smoke-tested through `scripts/start-local.ps1` in Windows PowerShell 5.1 |
-| M2–M6 | Not started |
+| M2 | **In progress.** Built:
+- the Vite/React 19/TypeScript 7 app served from the API's `wwwroot`
+- design tokens with light, dark and system themes
+- sign-in and the canvas list
+- the React Flow canvas at the server's layout
+- semantic zoom at three levels; zoomed out, each region is a labelled miniature
+- live SSE with gap detection and Claude's additions animated in with a toast
+- owner drag-to-place (optimistic, with replay after a 412)
+- 1/2/3, F and Shift+F keys
+
+Checked with 19 Vitest tests and a headless Edge pass (sign-in, all zoom levels, live add, no console errors).
+
+**Remaining:**
+- the command palette (Ctrl+K) and search
+- quick-add and the card editing panel
+- connect mode
+- floating edges (they currently attach top to bottom and cross cards)
+- moving cards between regions by drag
+- Tidy (ELK) with undo, plus Ctrl+Z
+- the history list and the shortcut sheet |
+| M3–M6 | Not started |
 
 ### What M1 changed from this design
 

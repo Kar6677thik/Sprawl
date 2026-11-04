@@ -1,0 +1,78 @@
+/* Design tokens. One neutral ramp, one accent, light and dark from the same names.
+   data-theme on <html> overrides the system preference; without it the media query decides. */
+:root {
+  --font: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+
+  --accent: oklch(0.62 0.17 255);
+  --accent-soft: oklch(0.62 0.17 255 / 0.14);
+  --accent-ring: oklch(0.62 0.17 255 / 0.55);
+
+  --bg: oklch(0.985 0 0);
+  --canvas: oklch(0.975 0 0);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.965 0 0);
+  --region: oklch(0.955 0.003 255 / 0.55);
+  --region-sub: oklch(0.93 0.004 255 / 0.55);
+  --border: oklch(0.9 0 0);
+  --border-strong: oklch(0.82 0 0);
+  --text: oklch(0.22 0 0);
+  --text-muted: oklch(0.48 0 0);
+  --text-faint: oklch(0.65 0 0);
+  --dot: oklch(0.86 0 0);
+  --edge: oklch(0.68 0 0);
+  --danger: oklch(0.58 0.19 25);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.06), 0 1px 1px oklch(0 0 0 / 0.03);
+  --shadow-raised: 0 4px 16px oklch(0 0 0 / 0.1), 0 1px 3px oklch(0 0 0 / 0.06);
+
+  --tint-grey: oklch(0.7 0 0);
+  --tint-blue: oklch(0.66 0.12 250);
+  --tint-green: oklch(0.68 0.12 155);
+  --tint-amber: oklch(0.76 0.13 80);
+  --tint-red: oklch(0.64 0.16 25);
+  --tint-violet: oklch(0.62 0.14 300);
+
+  --radius: 10px;
+  --radius-small: 6px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.17 0 0);
+    --canvas: oklch(0.155 0 0);
+    --surface: oklch(0.215 0 0);
+    --surface-2: oklch(0.245 0 0);
+    --region: oklch(0.24 0.004 255 / 0.5);
+    --region-sub: oklch(0.28 0.005 255 / 0.5);
+    --border: oklch(0.3 0 0);
+    --border-strong: oklch(0.38 0 0);
+    --text: oklch(0.93 0 0);
+    --text-muted: oklch(0.7 0 0);
+    --text-faint: oklch(0.52 0 0);
+    --dot: oklch(0.27 0 0);
+    --edge: oklch(0.5 0 0);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.4);
+    --shadow-raised: 0 6px 20px oklch(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: oklch(0.17 0 0);
+  --canvas: oklch(0.155 0 0);
+  --surface: oklch(0.215 0 0);
+  --surface-2: oklch(0.245 0 0);
+  --region: oklch(0.24 0.004 255 / 0.5);
+  --region-sub: oklch(0.28 0.005 255 / 0.5);
+  --border: oklch(0.3 0 0);
+  --border-strong: oklch(0.38 0 0);
+  --text: oklch(0.93 0 0);
+  --text-muted: oklch(0.7 0 0);
+  --text-faint: oklch(0.52 0 0);
+  --dot: oklch(0.27 0 0);
+  --edge: oklch(0.5 0 0);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-raised: 0 6px 20px oklch(0 0 0 / 0.5);
+  color-scheme: dark;
+}
