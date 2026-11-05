@@ -94,16 +94,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Log in to GHCR (kept for the attestation upload; logged out in the last step)
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+        run: printf '%s' "$PACKAGE_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - id: build
         name: Build and push once; record immutable digests
         env:
-          PACKAGE_TOKEN: ${{ github.token }}
           API: ${{ needs.plan.outputs.api }}
           MCP: ${{ needs.plan.outputs.mcp }}
         run: |
           set -euo pipefail
-          printf '%s' "$PACKAGE_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          trap 'docker logout ghcr.io >/dev/null' EXIT
           build() {
             docker buildx build --platform linux/amd64 --provenance=false -f "$2" \
               --label "org.opencontainers.image.revision=$GITHUB_SHA" \
@@ -128,6 +129,9 @@ jobs:
           subject-name: ghcr.io/kar6677thik/sprawl-mcp
           subject-digest: ${{ steps.build.outputs.mcp }}
           push-to-registry: true
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
 
   deploy-api:
     needs: [plan, publish]
