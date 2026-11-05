@@ -99,7 +99,8 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
     [Authorize(Policy = "scope:canvas.read")]
     [Description("Where one card sits in the canvas's web of meaning: its #tags, the cards its [[links]] point to, [[links]] that name no card yet, " +
         "backlinks (cards linking to it), unlinked mentions (cards naming its title without linking: candidates for a [[link]] or a connection), " +
-        "and related cards it is not yet connected to, with the terms they share. Use it before connecting or expanding around a card.")]
+        "related cards it is not yet connected to (with the terms they share), and links to and from cards on other canvases ([[Canvas/Card]]). " +
+        "Use it before connecting or expanding around a card.")]
     public Task<McpResult<CardContext>> GetCardContext(
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The card id (cd_…).")] string cardId,

@@ -145,6 +145,7 @@ Everything is under `/api/v1`. Errors are RFC 9457 `application/problem+json` wi
 | `GET /canvases/{id}/cards/{cardId}/context` | A card's tags, links, backlinks, unlinked mentions and related cards | ETag |
 | `GET /canvases/{id}/export?format=markdown\|json-canvas` | Download as Markdown or JSON Canvas 1.0 (`.canvas`, with a `sprawlKind` extension per card) | |
 | `POST /canvases/import` `{title, canvas}` | A JSON Canvas as a new canvas, in one create batch of up to 9,300 intents | Owner only; 8 MiB body |
+| `GET /canvases/{id}/links/resolve?target=` | Where a `[[link]]` leads, on this canvas or another (`Canvas/Card` or a card id) | 404 when it leads nowhere |
 | `GET /reviews?canvas=&limit=` / `POST /reviews/{cardId}` `{grade}` | Open questions due for spaced review / grade one (`again`, `hard`, `good`, `easy`) | Grading is owner only |
 | `POST /cards/query` `{ids}` | Full cards plus their connections | ≤ 50 IDs; IDs are global, so no canvas ID is needed |
 | `GET /search?q=&canvas=&kind=&limit=` | FTS5 across canvases, with snippets | |
@@ -659,7 +660,7 @@ The images ran hardened in Production mode, including a real password + TOTP sig
 - the Restricted namespace and Orbit's catalog onboarding kit, admission policy and render
 - the network policies
 - a backup to restic, then a restore |
-| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests |
+| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests. **P4 (across canvases) built 5 Nov:** `[[Canvas/Card]]` links with backlinks on both sides, collections on the home page. 27 API and 39 web tests. **P5 built 5 Nov (without ink):** history replay (Shift+H) and saved searches |
 
 ### What M5 changed from this design
 

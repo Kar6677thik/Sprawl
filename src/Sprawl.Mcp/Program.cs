@@ -219,6 +219,7 @@ namespace Sprawl.Mcp
             nested at most one level) holding cards: idea, note, question (an open question: the canvas's frontier), link (a source) and code.
             Cards are joined by connections: relates, leads-to, contradicts, example-of, depends-on. Card text can also link: [[Card title]] (or [[cd_…]])
             in a body links to that card, and #tag in a title or body tags it. Both are read from the text, so editing the text edits them.
+            [[Other canvas title/Card title]] links to a card on another canvas; get_card_context lists those links and their backlinks.
 
             How to work:
             - Find the canvas first (list_canvases or search). Before adding to, editing or reorganizing it, call get_canvas so you do not duplicate

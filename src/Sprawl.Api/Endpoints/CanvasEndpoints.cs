@@ -43,17 +43,24 @@ public static class CanvasEndpoints
             return Results.Text(outline, "text/plain; charset=utf-8");
         });
 
-        api.MapGet("/canvases/{id}/insights", async (string id, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        api.MapGet("/canvases/{id}/insights", async (string id, CanvasStore store, CrossLinks cross, HttpContext context, CancellationToken ct) =>
         {
             var (row, state) = await store.Current(id, ct);
-            return Http.WithVersion(context, row.Version, new Insights(state).Analyze(id, row.Version));
+            var insights = new Insights(state).Analyze(id, row.Version);
+            // A [[Canvas/Card]] link that reaches another canvas is not dangling.
+            var reachable = await cross.Reachable(id, insights.DanglingLinks.Select(d => d.Target), ct);
+            return Http.WithVersion(context, row.Version, insights with { DanglingLinks = [.. insights.DanglingLinks.Where(d => !reachable.Contains(d.Target))] });
         });
 
-        api.MapGet("/canvases/{id}/cards/{cardId}/context", async (string id, string cardId, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        api.MapGet("/canvases/{id}/links/resolve", async (string id, string target, CrossLinks cross, CancellationToken ct) =>
+            await cross.Resolve(id, target, ct) is { } found ? Results.Ok(found) : throw SprawlException.NotFound($"No card matches [[{target}]]."));
+
+        api.MapGet("/canvases/{id}/cards/{cardId}/context", async (string id, string cardId, CanvasStore store, CrossLinks cross, HttpContext context, CancellationToken ct) =>
         {
             var (row, state) = await store.Current(id, ct);
             var card = state.Cards.GetValueOrDefault(cardId) ?? throw SprawlException.NotFound($"Card {cardId} is not on canvas {id}.");
-            return Http.WithVersion(context, row.Version, new Insights(state).Context(id, row.Version, card));
+            var local = new Insights(state).Context(id, row.Version, card);
+            return Http.WithVersion(context, row.Version, await cross.Extend(local, card, state, ct));
         });
 
         api.MapGet("/canvases/{id}/export", async (string id, string? format, CanvasStore store, CancellationToken ct) =>

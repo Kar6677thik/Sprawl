@@ -195,3 +195,6 @@ input::placeholder { color: var(--text-faint); }
 }
 .flow .edge-text-link .react-flow__edge-path { stroke-dasharray: 1 4; stroke-linecap: round; stroke-width: 1.5; opacity: 0.8; }
 .canvas-meta .due { color: var(--accent); }
+.collection + .collection { margin-top: 24px; }
+.collection-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+.collection-title span { font-weight: 500; margin-left: 4px; }

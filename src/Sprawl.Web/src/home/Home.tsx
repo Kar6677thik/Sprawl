@@ -4,6 +4,17 @@ import type { CanvasSummary } from "../api/types";
 import { navigate } from "../router";
 import { ThemeButton } from "../theme/ThemeButton";
 
+/** Canvases without a collection first (most recent first, as listed), then each collection alphabetically. */
+function groups(canvases: CanvasSummary[]): [string | null, CanvasSummary[]][] {
+  const map = new Map<string | null, CanvasSummary[]>();
+  for (const canvas of canvases) {
+    const list = map.get(canvas.collection) ?? [];
+    list.push(canvas);
+    map.set(canvas.collection, list);
+  }
+  return [...map.entries()].sort(([a], [b]) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
+}
+
 export function Home({ onSignOut }: { onSignOut: () => void }) {
   const [canvases, setCanvases] = useState<CanvasSummary[] | null>(null);
   const [query, setQuery] = useState("");
@@ -71,8 +82,11 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
         </form>
         {error && <p className="error" role="alert">{error}</p>}
         {canvases && canvases.length === 0 && <p className="empty">{query ? "No canvases match." : "No canvases yet. Create one, or ask Claude to."}</p>}
+        {groups(canvases ?? []).map(([collection, list]) => (
+        <section key={collection ?? ""} className="collection">
+        {collection && <h2 className="collection-title">{collection} <span>{list.length}</span></h2>}
         <ul className="canvas-list">
-          {canvases?.map((canvas) => (
+          {list.map((canvas) => (
             <li key={canvas.id}>
               <a href={`/c/${canvas.id}`} onClick={(event) => { event.preventDefault(); navigate(`/c/${canvas.id}`); }}>
                 <span className="canvas-title">{canvas.pinned && <span className="pin" aria-label="Pinned" />}{canvas.title}</span>
@@ -86,6 +100,8 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
             </li>
           ))}
         </ul>
+        </section>
+        ))}
       </main>
     </div>
   );

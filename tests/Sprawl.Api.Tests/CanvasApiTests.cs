@@ -118,6 +118,33 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Links_reach_cards_on_other_canvases_and_show_as_backlinks_there()
+    {
+        var device = factory.Device();
+        var target = await NewCanvas(device, "Paxos made simple", Card("Core", "Ballots", "b"), Card("Core", "TCP/IP", "t"));
+        var ballots = target.Refs["b"];
+        var source = await NewCanvas(device, "Consensus notes",
+            Card("Links", "Compare", "c", body: "See [[Paxos made simple/ballots]], [[" + ballots + "]], [[TCP/IP]] and [[Nowhere/Thing]]."),
+            Card("Links", "TCP/IP", "local"));
+
+        var context = await (await device.GetAsync($"/api/v1/canvases/{source.CanvasId}/cards/{source.Refs["c"]}/context")).Read<CardContext>();
+        var cross = Assert.Single(context.CrossLinks);
+        Assert.Equal((target.CanvasId, "Paxos made simple", ballots), (cross.CanvasId, cross.CanvasTitle, cross.Card.Id));
+        Assert.Equal(source.Refs["local"], Assert.Single(context.Links).Id); // a local "TCP/IP" card wins over splitting at the slash
+        Assert.Equal(["Nowhere/Thing"], context.UnresolvedLinks);
+
+        var back = await (await device.GetAsync($"/api/v1/canvases/{target.CanvasId}/cards/{ballots}/context")).Read<CardContext>();
+        Assert.Equal(source.Refs["c"], Assert.Single(back.CrossBacklinks).Card.Id);
+
+        var insights = await (await device.GetAsync($"/api/v1/canvases/{source.CanvasId}/insights")).Read<CanvasInsights>();
+        Assert.Equal("Nowhere/Thing", Assert.Single(insights.DanglingLinks).Target);
+
+        var resolved = await (await device.GetAsync($"/api/v1/canvases/{source.CanvasId}/links/resolve?target={Uri.EscapeDataString("paxos made simple/Ballots")}")).Read<LinkTarget>();
+        Assert.Equal((target.CanvasId, ballots), (resolved.CanvasId, resolved.CardId));
+        Assert.Equal(HttpStatusCode.NotFound, (await device.GetAsync($"/api/v1/canvases/{source.CanvasId}/links/resolve?target=Nowhere%2FThing")).StatusCode);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

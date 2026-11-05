@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { Card, CardContext, CardRef, CanvasDocument, Intent } from "../api/types";
+import type { Card, CardContext, CardRef, CanvasDocument, ExternalCardRef, Intent } from "../api/types";
+import { navigate } from "../router";
 import { KindGlyph } from "./parts";
 import { linkFirstMention } from "./semantics";
 
@@ -31,7 +32,8 @@ export function CardLinks({ doc, card, write, onFocus, onTag }: Props) {
     if (source) void write([{ type: "updateCard", id: source.id, body: linkFirstMention(source.body, card.title) }], [source.id]);
   };
   const connect = (to: string) => void write([{ type: "connect", from: card.id, to, kind: "relates" }], [card.id, to]);
-  const empty = context.tags.length + context.links.length + context.unresolvedLinks.length + context.backlinks.length + context.mentions.length + context.related.length === 0;
+  const empty = context.tags.length + context.links.length + context.unresolvedLinks.length + context.backlinks.length + context.mentions.length + context.related.length
+    + context.crossLinks.length + context.crossBacklinks.length === 0;
   if (empty) return null;
 
   return (
@@ -39,9 +41,10 @@ export function CardLinks({ doc, card, write, onFocus, onTag }: Props) {
       {context.tags.length > 0 && (
         <div className="tag-row">{context.tags.map((tag) => <button key={tag} type="button" className="tag-chip" onClick={() => onTag(tag)}>#{tag}</button>)}</div>
       )}
-      {(context.links.length > 0 || context.unresolvedLinks.length > 0) && (
+      {(context.links.length > 0 || context.unresolvedLinks.length > 0 || context.crossLinks.length > 0) && (
         <Section title="Links to">
           {context.links.map((ref) => <Row key={ref.id} item={ref} onFocus={onFocus} />)}
+          {context.crossLinks.map((ext) => <ExternalRow key={ext.card.id} item={ext} />)}
           {context.unresolvedLinks.map((title) => (
             <li key={title}>
               <span className="ref-missing" title="No card has this title yet">{title}</span>
@@ -50,7 +53,12 @@ export function CardLinks({ doc, card, write, onFocus, onTag }: Props) {
           ))}
         </Section>
       )}
-      {context.backlinks.length > 0 && <Section title="Linked from">{context.backlinks.map((ref) => <Row key={ref.id} item={ref} onFocus={onFocus} />)}</Section>}
+      {(context.backlinks.length > 0 || context.crossBacklinks.length > 0) && (
+        <Section title="Linked from">
+          {context.backlinks.map((ref) => <Row key={ref.id} item={ref} onFocus={onFocus} />)}
+          {context.crossBacklinks.map((ext) => <ExternalRow key={ext.card.id} item={ext} />)}
+        </Section>
+      )}
       {context.mentions.length > 0 && (
         <Section title="Mentioned in">
           {context.mentions.map((ref) => (
@@ -67,6 +75,18 @@ export function CardLinks({ doc, card, write, onFocus, onTag }: Props) {
         </Section>
       )}
     </>
+  );
+}
+
+/** A card on another canvas: opens that canvas focused on it. */
+function ExternalRow({ item }: { item: ExternalCardRef }) {
+  return (
+    <li>
+      <KindGlyph kind={item.card.kind} />
+      <button type="button" className="link-button" onClick={() => navigate(`/c/${item.canvasId}?focus=${item.card.id}`)} title={`On ${item.canvasTitle}`}>{item.card.title}</button>
+      <span className="ref-detail">↗ {item.canvasTitle}</span>
+      <span />
+    </li>
   );
 }
 

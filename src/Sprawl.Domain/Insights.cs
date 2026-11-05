@@ -68,7 +68,7 @@ public sealed class Insights
     {
         var outgoing = links.Outgoing(card.Id);
         return new(canvasId, version, Ref(card), tags[card.Id], [.. outgoing.Outgoing.Select(Ref)], outgoing.Unresolved,
-            [.. links.Backlinks(card.Id).Select(Ref)], [.. Semantics.UnlinkedMentions(state, card, links).Take(MaxListed).Select(Ref)], Related(card));
+            [.. links.Backlinks(card.Id).Select(Ref)], [.. Semantics.UnlinkedMentions(state, card, links).Take(MaxListed).Select(Ref)], Related(card), [], []);
     }
 
     /// <summary>Cards most like this one that it is not already connected or linked to.</summary>

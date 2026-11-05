@@ -1,5 +1,5 @@
 export const SHORTCUTS: [string, string][] = [
-  ["Ctrl K", "Command palette"],
+  ["Ctrl K", "Command palette (type “collection: Name” to file this canvas)"],
   ["/", "Search this canvas"],
   ["Ctrl Shift F", "Search all canvases"],
   ["#", "Browse cards by #tag"],
@@ -14,6 +14,7 @@ export const SHORTCUTS: [string, string][] = [
   ["Shift I", "Capture to the Inbox (stays open for the next thought)"],
   ["R", "Review open questions (1-4 to grade)"],
   ["H", "History"],
+  ["Shift H", "Replay history: slider, Space plays, arrows step"],
   ["P", "Present the regions one by one (arrows to move, Esc to stop)"],
   ["F / Shift F", "Focus the selection / fit the canvas"],
   ["1 2 3", "Zoom out to the map / titles / bodies"],

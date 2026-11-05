@@ -24,6 +24,8 @@ interface Props {
   onOpenCanvas: (canvasId: string, focus?: string) => void;
   onClose: () => void;
   initialQuery?: string;
+  /** Entries built from what is typed, e.g. "Move to collection <query>". */
+  dynamic?: (query: string, mode: PaletteMode) => PaletteEntry[];
 }
 
 const PLACEHOLDER: Record<PaletteMode, string> = {
@@ -33,7 +35,7 @@ const PLACEHOLDER: Record<PaletteMode, string> = {
 };
 
 /** Ctrl+K. Everything is reachable by name: actions, this canvas's regions and cards, other canvases, full-text search. */
-export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas, onClose, initialQuery = "" }: Props) {
+export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas, onClose, initialQuery = "", dynamic }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const [active, setActive] = useState(0);
   const [canvases, setCanvases] = useState<CanvasSummary[]>([]);
@@ -47,7 +49,7 @@ export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas,
     return () => window.clearTimeout(timer);
   }, [mode, query]);
 
-  const entries = useMemo<PaletteEntry[]>(() => {
+  const base = useMemo<PaletteEntry[]>(() => {
     if (mode === "global")
       return hits.map((hit) => ({
         id: hit.cardId, group: hit.canvasTitle, label: hit.title, hint: hit.snippet.replace(/[«»]/g, ""),
@@ -81,6 +83,8 @@ export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas,
       ...rank(query, others, (c) => c.label, 8),
     ];
   }, [actions, canvases, doc, hits, mode, onFocus, onOpenCanvas, onOpenCard, query]);
+
+  const entries = useMemo(() => (mode === "global" ? base : [...base, ...(dynamic?.(query.trim(), mode) ?? [])]), [base, dynamic, mode, query]);
 
   useEffect(() => setActive(0), [query, mode]);
   useEffect(() => { list.current?.querySelector(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);

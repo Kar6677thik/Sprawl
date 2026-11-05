@@ -1,4 +1,4 @@
-import type { BatchRequest, BatchResult, CanvasDocument, CanvasInsights, CardContext, ReviewGrade, ReviewQueue, ReviewState, CanvasSummary, HistoryEntry, SearchResult, Session } from "./types";
+import type { BatchRequest, BatchResult, CanvasDocument, CanvasInsights, CardContext, LinkTarget, ReviewGrade, ReviewQueue, ReviewState, CanvasSummary, HistoryEntry, SearchResult, Session } from "./types";
 
 /** A refused request, carrying the API's stable problem `code` (see ErrorCodes in Sprawl.Contracts). */
 export class ApiError extends Error {
@@ -44,6 +44,11 @@ export class SprawlClient {
 
   batch = (id: string, request: BatchRequest, ifMatch?: number) =>
     this.json<BatchResult>("POST", `/api/v1/canvases/${encodeURIComponent(id)}/batches`, { requestId: crypto.randomUUID(), ...request }, ifMatch);
+
+  resolveLink = (id: string, target: string) =>
+    this.json<LinkTarget>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/links/resolve?target=${encodeURIComponent(target)}`);
+
+  stateAt = (id: string, version: number) => this.json<CanvasDocument>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/state?version=${version}`);
 
   insights = (id: string) => this.json<CanvasInsights>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/insights`);
 

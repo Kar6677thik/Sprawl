@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyNodeChanges, Background, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Node, type NodeChange } from "@xyflow/react";
 import { api } from "../api/client";
-import type { CardKind, LayoutItem } from "../api/types";
+import type { CanvasDocument, CardKind, LayoutItem } from "../api/types";
 import { navigate } from "../router";
 import { applyTheme, nextTheme, readTheme } from "../theme/theme";
 import { Palette, type PaletteEntry, type PaletteMode } from "../palette/Palette";
@@ -13,13 +13,26 @@ import { regionAt, relativeTo } from "./geometry";
 import { HistoryPanel } from "./HistoryPanel";
 import { InsightsPanel } from "./InsightsPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { Replay } from "./Replay";
 import { LinkContext, type LinkActions } from "./parts";
-import { LinkIndex } from "./semantics";
+import { LinkIndex, mayBeExternal } from "./semantics";
 import { warmTidy } from "./tidy";
 import { nodeTypes, ZoomLevelContext } from "./nodes";
 import { Shortcuts } from "./Shortcuts";
 import type { CanvasController } from "./useCanvas";
 import { LEVEL_ZOOM, levelFor, type ZoomLevel } from "./zoom";
+
+/** Saved palette searches, per canvas and per browser: they are a view preference, not canvas content. */
+const savedKey = (canvasId: string) => `sprawl:saved-searches:${canvasId}`;
+function readSaved(canvasId: string): string[] {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(savedKey(canvasId)) ?? "[]");
+    return Array.isArray(value) ? value.filter((q): q is string => typeof q === "string").slice(0, 20) : [];
+  } catch { return []; }
+}
+function writeSaved(canvasId: string, queries: string[]) {
+  try { window.localStorage.setItem(savedKey(canvasId), JSON.stringify(queries)); } catch { /* storage full or blocked: keep it in memory */ }
+}
 
 /** Quick captures land here (the server creates the region on first use); Claude's triage_inbox prompt sorts it. */
 const INBOX = "Inbox";
@@ -42,7 +55,10 @@ type Panel = { kind: "card"; id: string } | { kind: "history" } | { kind: "insig
 type Composing = (ComposerMode & { region?: string; at?: { x: number; y: number }; capture?: boolean }) | null;
 
 function Flow({ canvas, initialFocus }: Props) {
-  const doc = canvas.doc!;
+  // While replaying history the view draws a past, read-only state instead of the live document.
+  const [replaying, setReplaying] = useState(false);
+  const [pastDoc, setPastDoc] = useState<CanvasDocument | null>(null);
+  const doc = (replaying ? pastDoc : null) ?? canvas.doc!;
   const [level, setLevel] = useState<ZoomLevel>("mid");
   const [nodes, setNodes] = useState<SprawlNode[]>(() => toNodes(doc, canvas.fresh));
   const [panel, setPanel] = useState<Panel>(null);
@@ -93,14 +109,20 @@ function Flow({ canvas, initialFocus }: Props) {
     open: (target) => {
       const found = linkIndex.resolve(target);
       if (found) { openCard(found.id); return; }
+      if (mayBeExternal(target)) {
+        void api.resolveLink(doc.meta.id, target).then(
+          (hit) => navigate(`/c/${hit.canvasId}?focus=${hit.cardId}`),
+          () => canvas.say(`No card matches [[${target}]] on any canvas.`));
+        return;
+      }
       const from = panel?.kind === "card" ? doc.cards.find((c) => c.id === panel.id) : undefined;
       canvas.say(`No card called "${target}" yet.`, { action: { label: "Create it", run: () => void canvas.write([{
         type: "addCard", ref: "new", kind: "note", title: target, ...(from?.regionId ? { region: from.regionId } : {}),
       }], []).then((result) => { const id = result?.refs["new"]; if (id) window.setTimeout(() => openCard(id), 300); }) } });
     },
     tag: showTag,
-    exists: (target) => linkIndex.resolve(target) !== undefined,
-  }), [canvas, doc.cards, linkIndex, openCard, panel, showTag]);
+    exists: (target) => linkIndex.resolve(target) !== undefined || mayBeExternal(target),
+  }), [canvas, doc.cards, doc.meta.id, linkIndex, openCard, panel, showTag]);
 
   useEffect(() => {
     if (focusedInitial.current || !initialFocus) return;
@@ -134,15 +156,15 @@ function Flow({ canvas, initialFocus }: Props) {
   }, [canvas, doc, flow]);
 
   const onNodeClick = useCallback((_event: unknown, node: Node) => {
-    if (!connectFrom) return;
+    if (!connectFrom || replaying) return;
     if (node.id !== connectFrom) void canvas.write([{ type: "connect", from: connectFrom, to: node.id }], [connectFrom, node.id]);
     setConnectFrom(null);
-  }, [canvas, connectFrom]);
+  }, [canvas, connectFrom, replaying]);
 
   const onNodeDoubleClick = useCallback((_event: unknown, node: Node) => {
-    if (node.id.startsWith("cd_")) setPanel({ kind: "card", id: node.id });
+    if (node.id.startsWith("cd_") && !replaying) setPanel({ kind: "card", id: node.id });
     else focus(node.id);
-  }, [focus]);
+  }, [focus, replaying]);
 
   const selection = useCallback(() => ({
     nodes: flow.getNodes().filter((n) => n.selected).map((n) => n.id),
@@ -229,6 +251,31 @@ function Flow({ canvas, initialFocus }: Props) {
     link.click();
   }, [doc.meta.id]);
 
+  /** Collections are one level of folders on the home page; typing a name in the palette offers to file this canvas there. */
+  const [saved, setSaved] = useState<string[]>(() => readSaved(doc.meta.id));
+  const saveSearches = useCallback((next: string[]) => { setSaved(next); writeSaved(doc.meta.id, next); }, [doc.meta.id]);
+
+  const dynamicEntries = useCallback((query: string, mode: PaletteMode): PaletteEntry[] => {
+    const entries: PaletteEntry[] = [];
+    // Any search (e.g. "#risk question") can be saved; saved ones are listed under Ctrl+K and rerun with one keystroke.
+    if (query && !/^(collection:|move to )/i.test(query)) {
+      if (saved.includes(query))
+        entries.push({ id: "search-forget", group: "Saved searches", label: `Forget saved search “${query}”`, run: () => saveSearches(saved.filter((q) => q !== query)) });
+      else if (mode === "canvas" || query.startsWith("#"))
+        entries.push({ id: "search-save", group: "Saved searches", label: `Save search “${query}”`, run: () => { saveSearches([...saved, query].slice(-20)); canvas.say(`Saved “${query}”: find it under Ctrl+K.`); } });
+    }
+    if (mode !== "all") return entries;
+    const prefixed = /^(collection:|move to )/i.test(query);
+    const name = query.replace(/^(collection:|move to )\s*/i, "").trim();
+    if (prefixed && name && name.length <= 80 && name.toLowerCase() !== (doc.meta.collection ?? "").toLowerCase())
+      entries.push({ id: "collection-set", group: "Collection", label: `Move this canvas to “${name}”`,
+        run: () => void canvas.write([{ type: "updateCanvas", collection: name }], []) });
+    if (doc.meta.collection && /^(collection|remove from)/i.test(query))
+      entries.push({ id: "collection-clear", group: "Collection", label: `Take this canvas out of “${doc.meta.collection}”`,
+        run: () => void canvas.write([{ type: "updateCanvas", clearCollection: true }], []) });
+    return entries;
+  }, [canvas, doc.meta.collection, saveSearches, saved]);
+
   const tidySelection = useCallback(() => {
     const selected = selection().nodes[0];
     const region = selected?.startsWith("rg_") ? selected : doc.cards.find((c) => c.id === selected)?.regionId ?? null;
@@ -236,6 +283,7 @@ function Flow({ canvas, initialFocus }: Props) {
   }, [canvas, doc.cards, selection]);
 
   const actions = useMemo<PaletteEntry[]>(() => [
+    ...saved.map((query) => ({ id: `saved:${query}`, group: "Saved searches", label: query, hint: "saved search", run: () => window.setTimeout(() => openPalette("canvas", query)) })),
     { id: "new-card", group: "Actions", label: "New card", keys: "N", run: startCard },
     { id: "new-region", group: "Actions", label: "New region", keys: "⇧N", run: () => setComposing({ kind: "region" }) },
     { id: "search", group: "Actions", label: "Search this canvas", keys: "/", run: () => window.setTimeout(() => openPalette("canvas")) },
@@ -253,6 +301,7 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "history", group: "Actions", label: "History", keys: "H", run: () => setPanel({ kind: "history" }) },
     { id: "capture", group: "Actions", label: "Capture to Inbox", hint: "quick thoughts, sort later", keys: "⇧I", run: () => setComposing(CAPTURE) },
     { id: "review", group: "Actions", label: "Review open questions", keys: "R", run: () => setPanel({ kind: "review" }) },
+    { id: "replay", group: "Actions", label: "Replay history", hint: "watch the canvas grow", keys: "⇧H", run: () => { setPanel(null); setReplaying(true); } },
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -263,12 +312,13 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, doc.meta.id, download, flow, openPalette, present, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, download, flow, openPalette, present, saved, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key;
+      if (replaying) return; // Replay owns the keyboard; nothing may edit a past state.
       if (presenting !== null && !mod) {
         const moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
         if (key === "Escape") { event.preventDefault(); present(null); return; }
@@ -298,6 +348,7 @@ function Flow({ canvas, initialFocus }: Props) {
         case "?": setShortcuts(true); return;
         case "N": event.preventDefault(); setComposing({ kind: "region" }); return;
         case "n": event.preventDefault(); startCard(); return;
+        case "H": setPanel(null); setReplaying(true); return;
         case "h": setPanel((p) => (p?.kind === "history" ? null : { kind: "history" })); return;
         case "t": tidySelection(); return;
         case "F": void flow.fitView({ duration: 300, padding: 0.1 }); return;
@@ -310,20 +361,21 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, selection, shortcuts, startCard, steps.length, tidySelection]);
+  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, selection, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
   return (
     <ZoomLevelContext.Provider value={level}>
       <LinkContext.Provider value={linkActions}>
-      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
+          nodesDraggable={!replaying}
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onNodeClick={onNodeClick}
@@ -344,6 +396,10 @@ function Flow({ canvas, initialFocus }: Props) {
           <Background gap={24} size={1} />
           <ZoomTracker onLevel={setLevel} />
         </ReactFlow>
+        {replaying && canvas.doc && (
+          <Replay canvasId={canvas.doc.meta.id} latest={canvas.doc.version} onState={setPastDoc}
+            onRestore={(v) => { setReplaying(false); void canvas.revertTo(v); }} onExit={() => setReplaying(false)} />
+        )}
         {presenting !== null && steps[presenting] && (
           <div className="presenter" role="status" aria-live="polite">
             <button type="button" className="icon-button" aria-label="Previous region" disabled={presenting === 0} onClick={() => present(presenting - 1)}>‹</button>
@@ -382,7 +438,7 @@ function Flow({ canvas, initialFocus }: Props) {
         )}
       </div>
       {palette && (
-        <Palette mode={palette} doc={doc} initialQuery={paletteQuery} actions={actions} onClose={() => setPalette(null)} onFocus={focus} onOpenCard={openCard}
+        <Palette mode={palette} doc={doc} initialQuery={paletteQuery} dynamic={dynamicEntries} actions={actions} onClose={() => setPalette(null)} onFocus={focus} onOpenCard={openCard}
           onOpenCanvas={(id, card) => navigate(`/c/${id}${card ? `?focus=${card}` : ""}`)} />
       )}
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}

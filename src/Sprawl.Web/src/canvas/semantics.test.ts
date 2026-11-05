@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { card, documentOf, edge } from "./fixtures";
 import { toLinkEdges } from "./flow";
-import { linkFirstMention, LinkIndex, linkify, linkTargets, normalizeTitle, tagsOf } from "./semantics";
+import { linkFirstMention, LinkIndex, linkify, linkTargets, mayBeExternal, normalizeTitle, tagsOf } from "./semantics";
 
 describe("semantics", () => {
   it("reads links and tags from prose, never from code", () => {
@@ -37,5 +37,12 @@ describe("semantics", () => {
   it("links the first plain mention, or appends a link", () => {
     expect(linkFirstMention("Snapshots are how log compaction works.", "Log compaction")).toBe("Snapshots are how [[log compaction]] works.");
     expect(linkFirstMention("Nothing", "Log compaction")).toBe("Nothing [[Log compaction]]");
+  });
+
+  it("recognises targets that may lead to another canvas", () => {
+    expect(mayBeExternal("Paxos/Ballots")).toBe(true);
+    expect(mayBeExternal("cd_0a1b2c3d")).toBe(true);
+    expect(mayBeExternal("Ballots")).toBe(false);
+    expect(mayBeExternal("/Ballots")).toBe(false);
   });
 });

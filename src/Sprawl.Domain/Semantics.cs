@@ -19,6 +19,19 @@ public static partial class Semantics
     public static IReadOnlyList<string> LinkTargets(string text) =>
         [.. WikiLink().Matches(Prose(text)).Select(m => m.Groups[1].Value.Split('|')[0].Trim()).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];
 
+    /// <summary>
+    /// A link target that may point at another canvas: <c>Canvas title/Card title</c>, <c>cv_…/Card</c> or a bare card id
+    /// (ids are global). Split at the first slash; callers try the whole target on this canvas first, so a local card
+    /// titled "TCP/IP" still wins.
+    /// </summary>
+    public static (string Canvas, string Card)? SplitCrossTarget(string target)
+    {
+        var slash = target.IndexOf('/', StringComparison.Ordinal);
+        if (slash <= 0 || slash == target.Length - 1) return null;
+        var (canvas, card) = (target[..slash].Trim(), target[(slash + 1)..].Trim());
+        return canvas.Length == 0 || card.Length == 0 ? null : (canvas, card);
+    }
+
     /// <summary>Lower-case tags from <c>#tag</c> in the title and body (not markdown headings, URLs or code).</summary>
     public static IReadOnlyList<string> Tags(Card card) =>
         [.. Hashtag().Matches(Prose(card.Title + "\n" + card.Body)).Select(m => m.Groups[1].Value.ToLowerInvariant().TrimEnd('-'))

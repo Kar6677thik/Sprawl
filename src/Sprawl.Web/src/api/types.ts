@@ -154,7 +154,7 @@ export type Intent =
   | { type: "deleteCards"; ids: string[] }
   | { type: "deleteRegion"; id: string }
   | { type: "updateRegion"; id: string; title?: string; tint?: string }
-  | { type: "updateCanvas"; title?: string; description?: string; tags?: string[]; pinned?: boolean; archived?: boolean }
+  | { type: "updateCanvas"; title?: string; description?: string; tags?: string[]; collection?: string; clearCollection?: boolean; pinned?: boolean; archived?: boolean }
   | { type: "setLayout"; items: LayoutItem[] }
   | { type: "unpin"; ids: string[] };
 
@@ -248,6 +248,19 @@ export interface RelatedCard {
   sharedTerms: string[];
 }
 
+export interface ExternalCardRef {
+  canvasId: string;
+  canvasTitle: string;
+  card: CardRef;
+}
+
+export interface LinkTarget {
+  canvasId: string;
+  canvasTitle: string;
+  cardId: string;
+  cardTitle: string;
+}
+
 export interface CardContext {
   canvasId: string;
   version: number;
@@ -258,6 +271,8 @@ export interface CardContext {
   backlinks: CardRef[];
   mentions: CardRef[];
   related: RelatedCard[];
+  crossLinks: ExternalCardRef[];
+  crossBacklinks: ExternalCardRef[];
 }
 
 export interface RegionGap {

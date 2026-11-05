@@ -28,6 +28,9 @@ export function linkTargets(text: string): string[] {
   return targets;
 }
 
+/** A target that may lead to another canvas: a bare card id, or "Canvas/Card". */
+export const mayBeExternal = (target: string) => /^cd_[0-9a-hjkmnp-tv-z]{8}$/.test(target.trim()) || /^[^/]+\/.+$/.test(target.trim());
+
 export function tagsOf(card: Pick<Card, "title" | "body">): string[] {
   const tags: string[] = [];
   for (const match of prose(`${card.title}\n${card.body}`).matchAll(HASHTAG)) {

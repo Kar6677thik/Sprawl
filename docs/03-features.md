@@ -1,6 +1,6 @@
 # Sprawl feature plan: the best of comparable tools
 
-Written 5 November 2026. **Status: P1–P3 built (P2 without PNG export); P4–P5 not started.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+Written 5 November 2026. **Status: P1–P5 built, except PNG export (P2) and ink (P5), both deferred on purpose.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
 
 ## 1. What the others do best
 
@@ -51,13 +51,17 @@ Left out on purpose: real-time multi-user collaboration (single owner), an in-ap
   - `GET /api/v1/reviews?canvas=&limit=` (owner and device) and `POST /api/v1/reviews/{cardId}` `{grade}` (owner only: Claude reads the queue, never grades it).
   - MCP `get_due_questions` (read) and the `answer_questions` prompt: Claude researches the due questions and adds answers as connected notes, leaving the questions for the owner to settle.
 
-### P4: Across canvases
+### P4: Across canvases (built)
 
-- `[[Canvas/Card title]]` links between canvases, with backlinks listed on both sides.
-- A collections view on the home page and canvas-level graph of cross links.
+- **Links between canvases:** `[[Canvas title/Card title]]` (canvas by id or title, card by id or title) or a bare `[[cd_…]]`, since card ids are global. The whole target is tried on its own canvas first, so a local card titled "TCP/IP" still wins. Nothing is stored; `Sprawl.Api/Data/CrossLinks.cs` resolves at read time, so links follow renames.
+  - The card context gains `crossLinks` and `crossBacklinks`; the panel lists them with the other canvas's name, and a click opens that canvas on the card. Insights no longer reports a link as dangling when it reaches another canvas.
+  - `GET /api/v1/canvases/{id}/links/resolve?target=` is what a click on such a link calls.
+  - Cross backlinks are found by a text pre-filter (`[[` plus the card's id or title in the body) and then confirmed by resolving, so a scan stays cheap.
+- **Collections:** the home page groups canvases under their collection. In the palette, `collection: Name` (or `move to Name`) files the current canvas; `collection` alone offers to take it out.
+- **Not built:** a canvas-level graph of cross links. The backlinks lists cover the use; revisit if canvases multiply.
 
-### P5: Freeform and time
+### P5: Freeform and time (built, except ink)
 
-- Ink and simple shapes as a non-semantic layer Claude can see only as "sketch in region X".
-- History replay: scrub the version slider and watch the canvas grow.
-- Saved queries ("all `#risk` questions") as live palette entries.
+- **History replay** (`Shift+H`): a slider over every version, Space to play, arrows to step, Restore to revert to the version shown (a new version; nothing is lost). Past states come from `GET /state?version=`, are cached in the session, and are read-only: edits, drags and the palette are off while replaying.
+- **Saved searches:** any palette search (for example `#risk question`) can be saved; saved ones appear under Ctrl+K and rerun with one keystroke. They are kept per canvas in the browser's local storage, because they are a view preference, not canvas content.
+- **Not built: ink and shapes.** They would need a new entity type through the op log, undo and placement, and Claude could not read them; they add little to a canvas that Claude mostly writes. Revisit if hand sketching becomes a real need.

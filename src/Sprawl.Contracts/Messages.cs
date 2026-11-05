@@ -103,7 +103,12 @@ public sealed record CardRef(string Id, string Title, string Kind, string? Regio
 /// <param name="SharedTerms">The words (and <c>#tags</c>) the two cards have in common, most telling first.</param>
 public sealed record RelatedCard(CardRef Card, double Score, IReadOnlyList<string> SharedTerms);
 
+/// <summary>A card on another canvas, reached by a <c>[[Canvas/Card]]</c> link.</summary>
+public sealed record ExternalCardRef(string CanvasId, string CanvasTitle, CardRef Card);
+
 /// <summary>A card's place in the canvas's web of meaning, derived from text and connections.</summary>
+/// <param name="CrossLinks">Cards on other canvases this card links to.</param>
+/// <param name="CrossBacklinks">Cards on other canvases that link to this card.</param>
 public sealed record CardContext(
     string CanvasId,
     long Version,
@@ -113,7 +118,12 @@ public sealed record CardContext(
     IReadOnlyList<string> UnresolvedLinks,
     IReadOnlyList<CardRef> Backlinks,
     IReadOnlyList<CardRef> Mentions,
-    IReadOnlyList<RelatedCard> Related);
+    IReadOnlyList<RelatedCard> Related,
+    IReadOnlyList<ExternalCardRef> CrossLinks,
+    IReadOnlyList<ExternalCardRef> CrossBacklinks);
+
+/// <summary>Where a <c>[[link]]</c> written on one canvas leads.</summary>
+public sealed record LinkTarget(string CanvasId, string CanvasTitle, string CardId, string CardTitle);
 
 /// <summary>Two regions that talk about the same things but have no connection or link between them.</summary>
 public sealed record RegionGap(string FirstId, string FirstTitle, string SecondId, string SecondTitle, double Similarity, IReadOnlyList<string> SharedTerms);
