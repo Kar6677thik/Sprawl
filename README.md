@@ -2,7 +2,7 @@
 
 A minimalist infinite canvas, one per topic, that keeps growing over time. Each canvas is a living map of your thinking on one subject: regions of cards (ideas, notes, open questions, links, code) joined by labelled connections. Claude adds most of the content through an MCP server, and you edit directly in the UI. Every change goes into an operation log, so you can see how a canvas grew and revert it to any version.
 
-**Status: M1–M3 done.** The API (data model, deterministic placement, op log with undo and revert, live events), the web canvas (semantic zoom, live updates, editing, command palette, Tidy, history) and the MCP server (15 tools, 3 prompts, OAuth resource server) are built and run locally. Next: Orbit Identity integration (M4) and deployment (M5). In the canvas, press `?` for keyboard shortcuts. Design: [docs/01-design.md](docs/01-design.md).
+**Status: M1–M3 done.** The API (data model, deterministic placement, op log with undo and revert, live events), the web canvas (semantic zoom, live updates, editing, command palette, Tidy, history) and the MCP server (15 tools, 3 prompts, OAuth resource server) are built and run locally. Orbit Identity serves the Sprawl resource (M4), and the release artifacts and runbook for Megatron are ready ([docs/02-operations.md](docs/02-operations.md), M5). In the canvas, press `?` for keyboard shortcuts. Design: [docs/01-design.md](docs/01-design.md).
 
 ## Start locally on Windows
 
@@ -63,7 +63,9 @@ Keep `.local` private: it holds the device token, verifiers and the database.
 | `tests/Sprawl.Api.Tests` | Endpoints in-process: concurrency (412/428), idempotency, atomicity, snapshots, trash, SSE, auth on both listeners |
 | `tests/Sprawl.Mcp.Tests` | Scopes and tool discovery, protected-resource metadata, token rejection (audience, issuer, type, algorithm, subject), dev bearer refused outside Development, a full tool session against the real API |
 | `samples/seed` | The sample canvas |
-| `scripts` | Local build, start and device-token scripts (PowerShell 5.1) |
+| `scripts` | Local build and start, device token, and release image build (PowerShell 5.1) |
+| `deploy` | k3s manifests for the API (with backup and restore jobs), the MCP's Orbit catalog spec, and the image import helper |
+| `Dockerfile`, `Dockerfile.mcp` | Release images: digest-pinned, non-root, read-only root filesystem |
 
 ```powershell
 dotnet restore Sprawl.slnx --locked-mode

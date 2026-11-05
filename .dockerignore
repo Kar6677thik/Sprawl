@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+src/Sprawl.Api/wwwroot/
+.local/
+.git/
+tests/
+docs/

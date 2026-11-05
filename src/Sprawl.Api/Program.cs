@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -37,7 +38,14 @@ builder.Services.AddSingleton<OwnerSecondFactor>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddHostedService<SampleSeeder>();
 builder.Services.AddHostedService<TrashPurger>();
+builder.Services.AddSingleton<SnapshotBackup>();
+builder.Services.AddHostedService(services => services.GetRequiredService<SnapshotBackup>());
 
+// Cookie keys live only in memory: a restart signs the owner out (by design), and no key ever touches a disk.
+builder.Services.AddDataProtection().SetApplicationName("sprawl");
+builder.Services.Configure<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>(options => options.XmlRepository = new InMemoryXmlRepository());
+// With nothing written anywhere, "keys may be persisted unencrypted" no longer applies.
+builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager", LogLevel.Error);
 builder.Services.AddAuthentication(SprawlSchemes.Selector)
     .AddPolicyScheme(SprawlSchemes.Selector, null, options =>
         // The listening port decides the scheme: cookies are ignored on the device port, bearer tokens everywhere else.
@@ -167,3 +175,12 @@ static void ValidateSecurityConfiguration(ApiOptions api, AuthOptions auth, IHos
 }
 
 public partial class Program;
+
+/// <summary>Data Protection key storage that never leaves process memory.</summary>
+internal sealed class InMemoryXmlRepository : Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository
+{
+    private readonly List<System.Xml.Linq.XElement> elements = [];
+    private readonly Lock gate = new();
+    public IReadOnlyCollection<System.Xml.Linq.XElement> GetAllElements() { lock (gate) return [.. elements.Select(e => new System.Xml.Linq.XElement(e))]; }
+    public void StoreElement(System.Xml.Linq.XElement element, string friendlyName) { lock (gate) elements.Add(new System.Xml.Linq.XElement(element)); }
+}

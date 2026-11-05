@@ -16,6 +16,15 @@ public sealed class ApiOptions
     public string[] TrustedProxies { get; set; } = [];
     [Range(1, 365)] public int TrashDays { get; set; } = 30;
     [Range(10, 100_000)] public int SnapshotEvery { get; set; } = 100;
+    public BackupOptions Backup { get; set; } = new();
+}
+
+public sealed class BackupOptions
+{
+    /// <summary>Where nightly verified copies go (e.g. /data/backups). Empty disables backups.</summary>
+    public string Directory { get; set; } = "";
+    [Range(0, 23)] public int HourUtc { get; set; } = 2;
+    [Range(1, 365)] public int Keep { get; set; } = 14;
 }
 
 public sealed class AuthOptions

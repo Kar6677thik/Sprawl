@@ -1,6 +1,6 @@
 # Sprawl design
 
-Written 4 November 2026. **Status: M1–M3 built (API, web canvas, local MCP server); M4–M6 not started.** Where M1 differs from this design, [§14](#what-m1-changed-from-this-design) says so. Pinned to MCP revision **2026-07-28**. Versions below were checked against NuGet, npm and the .NET release feed on the same day. The reference implementations are `slate.lib-identity/src/Slate.Lib.Mcp` and `orbit-cloud/src/Orbit.Identity`. Both were read, not modified.
+Written 4 November 2026. **Status: M1–M3 built; M4 done on the Orbit side; M5 release artifacts built and rehearsed on a disposable k3s, not yet applied to Megatron. M6 not started.** Where M1 differs from this design, [§14](#what-m1-changed-from-this-design) says so. Pinned to MCP revision **2026-07-28**. Versions below were checked against NuGet, npm and the .NET release feed on the same day. The reference implementations are `slate.lib-identity/src/Slate.Lib.Mcp` and `orbit-cloud/src/Orbit.Identity`. Both were read, not modified.
 
 ## 1. Summary
 
@@ -494,7 +494,7 @@ flowchart LR
 
 - **Workload:** one Deployment, `replicas: 1`, `strategy: Recreate` (single SQLite writer). The pod is Restricted: non-root, read-only root filesystem, `/tmp` emptyDir, no SA token, seccomp `RuntimeDefault`. Requests are 50m CPU / 128 Mi; limits are 500m / 320 Mi.
 - **Storage:** PVC `sprawl-data` (1 Gi, `local-path`) mounted at `/data`.
-- **Service:** a ClusterIP Service on a **fixed** IP (the next free address after Orbit's `10.43.0.100`, re-checked at install), ports 8080 and 8081.
+- **Service:** a ClusterIP Service on a **fixed** IP, ports 8080 and 8081. Use `10.43.0.102`: `10.43.0.100` is Orbit and `10.43.0.101` is Orbit Identity (it serves `auth.` through cloudflared and `svc:auth`). Re-check at install with `kubectl get svc -A -o wide | grep '10.43.0.10'`.
 - **Tailnet access:** `sudo tailscale serve --service=svc:sprawl --https=443 http://<ip>:8080`. Add a grant and an `autoApprovers` entry for `svc:sprawl` like Orbit's ([orbit tailscale.md](../../orbit-cloud/deploy/tailscale.md)). `TrustedProxies` = the node's `cni0` address. SSE through Serve is verified at install (Serve streams HTTP/1.1 responses; the 25 s heartbeat keeps idle connections open).
 - **NetworkPolicy:**
   - ingress on 8080 from the node only
@@ -545,6 +545,26 @@ spec:
 The catalog validator may reject `Secrets__ApiDeviceToken` as a plain `env` name; that's fine, because it is a `secretEnv` name. `OwnerSubject` isn't secret. Validate the spec with `orbit-catalog validate` before the PR.
 
 ## 11. Orbit Identity change
+
+**Status: done and live on Megatron since 5 Nov** (orbit-cloud PR #6). Both blockers below were fixed in Orbit Identity:
+- **Existing clients gain new resources:** a known client gains configured resources it lacks, plus scopes new to it, judged against a stored `orbit_scopes_known`. Ceilings the owner lowered stay lowered, and disabled clients are untouched. Claude's existing client already holds the Sprawl permissions.
+- **Requests without `resource`:** `Identity__DefaultResource` binds them to Slate, so Claude must send `resource=https://canvas-mcp.karthiksurkanti.in/mcp` for Sprawl. It does, because the protected-resource metadata advertises exactly that.
+
+Sprawl MCP production values:
+
+| Setting | Value |
+|---|---|
+| `OAuth__Authority`, `OAuth__AuthorizationServers__0` | `https://auth.karthiksurkanti.in/` (trailing slash, equal to the discovery `issuer`) |
+| `OAuth__Resource`, `OAuth__Audience` | `https://canvas-mcp.karthiksurkanti.in/mcp` |
+| `OAuth__AllowedSubjectIds__0` | `7356e980-f25e-4c82-84f1-b00c5f9783f0` (the owner subject; an identifier, not a secret) |
+
+JWKS is at `https://auth.karthiksurkanti.in/.well-known/jwks`, public through Cloudflare, so the MCP pod needs egress to public 443.
+
+Sprawl tokens are ES256 `at+jwt`, carry only `canvas.*` plus `offline_access`, and last 15 minutes. Refresh tokens rotate, with a 30-day idle and 90-day absolute limit.
+
+For Orbit-side needs (Identity config, catalog, network policy, audit checks while linking), message the Orbit Cloud thread directly.
+
+The original plan follows.
 
 **Config** (apply to `orbit-cloud/deploy/identity/identity.yaml`, Deployment env, after the Slate entries):
 
@@ -619,7 +639,31 @@ As briefed: **M1** API + data model + placement + op log + tests → **M2** web 
 
 Checked with 33 Vitest tests and a 20-step headless Edge pass that uses real keyboard and mouse input |
 | M3 | **Done 4 Nov.** `Sprawl.Mcp` (ModelContextProtocol.AspNetCore 2.3.1, stateless): 15 tools with annotations and per-tool scopes, 3 prompts, server instructions, protected-resource metadata, and JwtBearer requiring ES256 `at+jwt` with an exact issuer and audience and the owner's `sub`. Development bearer for local use only. 22 tests run against the real API in-process. Verified with MCP Inspector 2.13.0 (all tools, annotations, prompts, outline) and Claude Code 2.1.316 (expanded a region, then found and merged cross-region duplicates with `reorganize`) |
-| M4–M6 | Not started |
+| M4 | **Orbit side done 5 Nov** (orbit-cloud PR #6); Sprawl's MCP needs no code change (§11). The connection is proven only once the MCP is deployed (M5) and Claude links it |
+| M5 | **Built and rehearsed 5 Nov; awaiting the go-ahead to apply to Megatron.** Artifacts:
+- `Dockerfile` and `Dockerfile.mcp`: digest-pinned, numeric non-root user
+- `deploy/api/sprawl.yaml`, `backup.yaml` and `restore.yaml`
+- `deploy/mcp/sprawl-mcp.yaml`, validated by Orbit's catalog CLI
+- `deploy/import-image.sh` and `scripts/build-images.ps1`
+- the runbook [02-operations.md](02-operations.md)
+
+The images ran hardened in Production mode, including a real password + TOTP sign-in and the MCP fetching Orbit's live JWKS. On a disposable k3s 1.36.4 the rehearsal covered:
+- the Restricted namespace and Orbit's catalog onboarding kit, admission policy and render
+- the network policies
+- a backup to restic, then a restore |
+| M6 | Not started |
+
+### What M5 changed from this design
+
+- **Backups are split in two.** The API writes the nightly `VACUUM INTO` copy itself and integrity-checks it, so no extra image needs SQLite tools. A restic CronJob ships `/data/backups` off the node and initialises the repository on its first run. There is also a **Back up now** palette command, backed by an owner-only `POST /api/v1/backups`.
+- **NetworkPolicy cannot isolate a pod from its own node:** the Kubernetes specification always allows that traffic. Processes on Megatron can reach the device port 8081, but they still need the device token, and the ClusterIP is not reachable from the LAN or the tailnet. Unrelated pods are blocked from both ports, which the rehearsal verified.
+- **Images declare the numeric user `$APP_UID` (1654).** The catalog renders `runAsNonRoot` without a `runAsUser`, and kubelet refuses a named user. The first rehearsal pod failed exactly that way.
+- **The catalog spec uses upper-case environment names** (`MCP__APIBASEURL`), as the catalog requires. .NET configuration keys are case-insensitive.
+- **The image digest to deploy is the one `ctr import --digests` registers.** It cannot be predicted from the tar, so `deploy/import-image.sh` extracts and verifies it.
+- **Cookie Data Protection keys are held in memory** by a custom repository, so nothing is ever written to disk. A restart signs you out, as designed.
+- **Resources follow measurements:** each process idles at about 43 MiB, so limits are 256 Mi (API) and 192 Mi (MCP). The PVC is 2 Gi to leave room for the 14 local copies.
+- **`AllowedHosts` is `*`.** tailscale serve, kubelet probes and the MCP (calling by ClusterIP) send different `Host` headers, and the app never builds URLs from `Host`.
+
 
 ### What M3 changed from this design
 

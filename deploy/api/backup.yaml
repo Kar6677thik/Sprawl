@@ -1,0 +1,97 @@
+# Ships the API's nightly verified copies (/data/backups on sprawl-data) to an encrypted restic repository, off the node.
+# The copies are consistent on their own (VACUUM INTO + integrity check), so the app never stops for a backup.
+# Secret (provisioned separately, never in this file):
+#   sprawl-backup   RESTIC_REPOSITORY, RESTIC_PASSWORD, plus the backend's credentials (e.g. AWS_ACCESS_KEY_ID and
+#                   AWS_SECRET_ACCESS_KEY for S3/B2). The first run initialises the repository (docs/02-operations.md §7).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sprawl-backup
+  namespace: sprawl
+spec:
+  # 30 minutes after the API's 02:00 UTC copy.
+  schedule: "30 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels: { app: sprawl-backup }
+        spec:
+          restartPolicy: Never
+          serviceAccountName: sprawl
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1654
+            runAsGroup: 1654
+            fsGroup: 1654
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  test -s /data/backups/backup-status.json || { echo "no backup copies yet"; exit 1; }
+                  grep -q '"state":"Succeeded"' /data/backups/backup-status.json || { echo "last copy failed; see the API log"; exit 1; }
+                  # First run only: create the repository. With a wrong password for an existing repository both commands
+                  # fail, so the job errors out instead of starting a new repository.
+                  restic cat config >/dev/null 2>&1 || restic init
+                  restic backup --tag sprawl --host megatron /data/backups
+                  restic forget --tag sprawl --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+                  restic check
+              env:
+                - { name: HOME, value: /tmp }
+                - { name: RESTIC_CACHE_DIR, value: /tmp/restic-cache }
+              envFrom:
+                - secretRef: { name: sprawl-backup }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+              volumeMounts:
+                - { name: data, mountPath: /data, readOnly: true }
+                - { name: temporary, mountPath: /tmp }
+          volumes:
+            - name: data
+              persistentVolumeClaim: { claimName: sprawl-data, readOnly: true }
+            - name: temporary
+              emptyDir: { sizeLimit: 512Mi }
+---
+# The backup job may reach DNS and HTTPS on the public internet (the restic backend), nothing else. If your backend
+# is not HTTPS (e.g. sftp on 22), change the port here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sprawl-backup
+  namespace: sprawl
+spec:
+  podSelector:
+    matchLabels: { app: sprawl-backup }
+  # No ingress rules: nothing connects to the backup job.
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16]
+      ports:
+        - { protocol: TCP, port: 443 }

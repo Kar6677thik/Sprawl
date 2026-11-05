@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+# Sprawl MCP: stateless, no volume. Build from the repository root:
+#   docker build --platform linux/amd64 -f Dockerfile.mcp -t ghcr.io/kar6677thik/sprawl-mcp:candidate .
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
+WORKDIR /source
+COPY global.json Directory.Build.props ./
+COPY src/Sprawl.Contracts/Sprawl.Contracts.csproj src/Sprawl.Contracts/packages.lock.json src/Sprawl.Contracts/
+COPY src/Sprawl.Mcp/Sprawl.Mcp.csproj src/Sprawl.Mcp/packages.lock.json src/Sprawl.Mcp/
+RUN dotnet restore src/Sprawl.Mcp/Sprawl.Mcp.csproj --locked-mode
+COPY src/Sprawl.Contracts/ src/Sprawl.Contracts/
+COPY src/Sprawl.Mcp/ src/Sprawl.Mcp/
+RUN dotnet publish src/Sprawl.Mcp/Sprawl.Mcp.csproj --no-restore -c Release -o /publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS runtime
+WORKDIR /app
+COPY --from=build --chown=root:root /publish/ ./
+ENV ASPNETCORE_HTTP_PORTS=8080 DOTNET_EnableDiagnostics=0 HOME=/tmp
+# Numeric, so kubelet can verify runAsNonRoot without a runAsUser (Orbit catalog renders none).
+USER $APP_UID
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Sprawl.Mcp.dll"]

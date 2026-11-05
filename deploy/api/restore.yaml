@@ -1,0 +1,65 @@
+# Restore the database from the restic repository (docs/02-operations.md §7). Run ONLY with the app scaled to zero:
+#   kubectl -n sprawl scale deploy/sprawl --replicas=0 && kubectl -n sprawl wait --for=delete pod -l app=sprawl --timeout=120s
+#   kubectl apply -f deploy/api/restore.yaml && kubectl -n sprawl wait --for=condition=complete job/sprawl-restore --timeout=600s
+#   kubectl -n sprawl logs job/sprawl-restore && kubectl -n sprawl delete job sprawl-restore
+#   kubectl -n sprawl scale deploy/sprawl --replicas=1
+# By default it restores the newest copy in the latest snapshot. Set BACKUP_FILE (e.g. sprawl-20261105-020000.db) for
+# another one. The current database is never deleted: it is moved to /data/pre-restore/ first.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sprawl-restore
+  namespace: sprawl
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels: { app: sprawl-backup }
+    spec:
+      restartPolicy: Never
+      serviceAccountName: sprawl
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: restic
+          image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              restic restore latest --tag sprawl --target /tmp/restore
+              if [ -n "${BACKUP_FILE:-}" ]; then source="/tmp/restore/data/backups/$BACKUP_FILE"; else source="$(ls /tmp/restore/data/backups/sprawl-*.db | sort | tail -1)"; fi
+              test -s "$source" || { echo "no such backup copy: $source"; exit 1; }
+              stamp="$(date -u +%Y%m%d-%H%M%S)"
+              mkdir -p /data/pre-restore
+              for f in sprawl.db sprawl.db-wal sprawl.db-shm; do if [ -f "/data/$f" ]; then mv "/data/$f" "/data/pre-restore/$f.$stamp"; fi; done
+              cp "$source" /data/sprawl.db
+              echo "restored $(basename "$source"); previous database kept in /data/pre-restore/*.$stamp"
+          env:
+            - { name: HOME, value: /tmp }
+            - { name: RESTIC_CACHE_DIR, value: /tmp/restic-cache }
+            - { name: BACKUP_FILE, value: "" }
+          envFrom:
+            - secretRef: { name: sprawl-backup }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: temporary, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: sprawl-data }
+        - name: temporary
+          emptyDir: { sizeLimit: 1Gi }

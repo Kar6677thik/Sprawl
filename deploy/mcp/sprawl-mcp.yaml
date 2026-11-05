@@ -1,0 +1,37 @@
+# Orbit catalog spec for Sprawl MCP. Copy to orbit-cloud catalog/apps/sprawl-mcp.yaml in a reviewed PR, with the
+# imported digest (docs/02-operations.md §4). Orbit renders one Deployment + one ClusterIP Service (port 80) in the
+# Restricted namespace app-sprawl-mcp, ingress from the node only. The public route is a cloudflared rule, not
+# `route:` (catalog routes are tailnet-only).
+apiVersion: orbit.catalog/v1alpha1
+kind: App
+metadata:
+  name: sprawl-mcp
+spec:
+  image: ghcr.io/kar6677thik/sprawl-mcp@sha256:IMAGE_DIGEST
+  port: 8080
+  replicas: 1
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { cpu: 300m, memory: 192Mi }
+  health:
+    # Liveness only reports this process; /health/ready also needs the API, and a restart would not fix that.
+    path: /health/live
+  # The catalog accepts only upper-case names; .NET configuration keys are case-insensitive, so MCP__APIBASEURL binds
+  # to Mcp:ApiBaseUrl.
+  env:
+    ASPNETCORE_ENVIRONMENT: Production
+    ALLOWEDHOSTS: "*"
+    MCP__PUBLICORIGIN: https://canvas-mcp.karthiksurkanti.in
+    # The sprawl Service's device listener (fixed ClusterIP, deploy/api/sprawl.yaml). HTTP inside the cluster only.
+    MCP__APIBASEURL: http://10.43.0.102:8081
+    MCP__ALLOWEDAPIHOSTS__0: 10.43.0.102
+    OAUTH__AUTHORITY: https://auth.karthiksurkanti.in/
+    OAUTH__AUTHORIZATIONSERVERS__0: https://auth.karthiksurkanti.in/
+    OAUTH__RESOURCE: https://canvas-mcp.karthiksurkanti.in/mcp
+    OAUTH__AUDIENCE: https://canvas-mcp.karthiksurkanti.in/mcp
+    # Orbit Identity's owner subject (an identifier, not a secret).
+    OAUTH__ALLOWEDSUBJECTIDS__0: 7356e980-f25e-4c82-84f1-b00c5f9783f0
+    # cloudflared runs on the node and reaches the pod from its cni0 address.
+    NETWORKING__TRUSTEDPROXIES__0: 10.42.0.1
+  secretEnv:
+    - { name: SECRETS__APIDEVICETOKEN, secret: sprawl-mcp-secrets, key: device-token }

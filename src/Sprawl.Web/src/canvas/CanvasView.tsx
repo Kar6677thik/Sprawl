@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyNodeChanges, Background, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Node, type NodeChange } from "@xyflow/react";
+import { api } from "../api/client";
 import type { CardKind, LayoutItem } from "../api/types";
 import { navigate } from "../router";
 import { applyTheme, nextTheme, readTheme } from "../theme/theme";
@@ -198,6 +199,8 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "theme", group: "Actions", label: "Switch theme", run: () => applyTheme(nextTheme(readTheme())) },
     { id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", keys: "?", run: () => setShortcuts(true) },
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
+    { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
+      .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
   ], [canvas, flow, startCard, tidySelection]);
 
   useEffect(() => {

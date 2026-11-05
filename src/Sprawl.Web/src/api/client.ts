@@ -56,6 +56,8 @@ export class SprawlClient {
   search = (q: string, canvas?: string) =>
     this.json<SearchResult>("GET", `/api/v1/search?q=${encodeURIComponent(q)}${canvas ? `&canvas=${encodeURIComponent(canvas)}` : ""}&limit=30`);
 
+  backupNow = () => this.json<{ file: string }>("POST", "/api/v1/backups");
+
   eventsUrl = (id: string) => `/api/v1/canvases/${encodeURIComponent(id)}/events`;
 
   private async json<T>(method: string, path: string, body?: unknown, ifMatch?: number): Promise<T> {

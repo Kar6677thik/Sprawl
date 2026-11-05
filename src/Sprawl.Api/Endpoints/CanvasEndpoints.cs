@@ -75,6 +75,14 @@ public static class CanvasEndpoints
             store.Search(q, canvas, kinds?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [], limit ?? 20, ct));
 
         api.MapGet("/canvases/{id}/events", Stream).RequireAuthorization(SprawlClaims.OwnerPolicy);
+
+        // Owner only: a verified copy now (before an upgrade or a restore drill), in addition to the nightly one.
+        api.MapPost("/backups", async (Services.SnapshotBackup backup, CancellationToken ct) =>
+        {
+            if (backup.Directory is null) throw new SprawlException(ErrorCodes.Conflict, "Backups are not configured (Api:Backup:Directory).", 409);
+            var path = await backup.RunOnce(ct);
+            return Results.Ok(new { file = Path.GetFileName(path) });
+        }).RequireAuthorization(SprawlClaims.OwnerPolicy);
     }
 
     private static IResult Result(HttpContext context, BatchResult result)

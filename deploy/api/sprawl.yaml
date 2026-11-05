@@ -1,0 +1,161 @@
+# Sprawl API + UI: tailnet-only at https://sprawl.tailf67d61.ts.net, SQLite on a PVC. Install: docs/02-operations.md.
+# Value to replace before applying (the runbook does it with one command):
+#   IMAGE_DIGEST    the digest you built, imported and smoke-tested
+# Secrets are provisioned separately and never live in this file:
+#   sprawl-owner    keys "verifier" and "totp"   (Orbit.Credentials format; use credentials separate from Orbit's)
+#   sprawl-device   key  "sha256"                (SHA-256 hex of the MCP device token; the token itself lives only in app-sprawl-mcp)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sprawl
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sprawl
+  namespace: sprawl
+# Sprawl never talks to the Kubernetes API.
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sprawl-data
+  namespace: sprawl
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests: { storage: 2Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sprawl
+  namespace: sprawl
+spec:
+  # SQLite on a ReadWriteOnce volume: exactly one writer, and the old pod stops before the new one starts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  progressDeadlineSeconds: 120
+  selector:
+    matchLabels: { app: sprawl }
+  template:
+    metadata:
+      labels: { app: sprawl }
+    spec:
+      serviceAccountName: sprawl
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: sprawl
+          image: ghcr.io/kar6677thik/sprawl@sha256:IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          ports:
+            - { name: ui, containerPort: 8080 }
+            - { name: device, containerPort: 8081 }
+          env:
+            - { name: ASPNETCORE_ENVIRONMENT, value: Production }
+            # tailscale serve, the MCP (by ClusterIP) and kubelet probes all present different Host headers. The app
+            # never builds URLs from Host, and unsafe requests must come from PublicOrigin.
+            - { name: AllowedHosts, value: "*" }
+            - { name: Api__PublicOrigin, value: "https://sprawl.tailf67d61.ts.net" }
+            - { name: Api__DevicePort, value: "8081" }
+            - { name: Api__DatabasePath, value: /data/sprawl.db }
+            # tailscale serve runs on the node and reaches the pod from its cni0 address.
+            - { name: Api__TrustedProxies__0, value: "10.42.0.1" }
+            # Nightly verified copies (02:00 UTC, newest 14 kept); the sprawl-backup CronJob ships them off the node.
+            - { name: Api__Backup__Directory, value: /data/backups }
+            - { name: Auth__CredentialFile, value: /run/sprawl/owner/verifier }
+            - { name: Auth__TotpFile, value: /run/sprawl/owner/totp }
+            - { name: Auth__DeviceTokenSha256File, value: /run/sprawl/device/sha256 }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi, ephemeral-storage: 32Mi }
+            limits: { cpu: 500m, memory: 256Mi, ephemeral-storage: 128Mi }
+          startupProbe:
+            httpGet: { path: /health/ready, port: ui }
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /health/ready, port: ui }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/live, port: ui }
+            periodSeconds: 20
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: owner, mountPath: /run/sprawl/owner, readOnly: true }
+            - { name: device, mountPath: /run/sprawl/device, readOnly: true }
+            - { name: temporary, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: sprawl-data }
+        - name: owner
+          secret: { secretName: sprawl-owner, defaultMode: 0440 }
+        - name: device
+          secret: { secretName: sprawl-device, defaultMode: 0440 }
+        - name: temporary
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+---
+# A fixed ClusterIP so tailscale serve and the MCP can point at it. 10.43.0.100 is Orbit and 10.43.0.101 is Orbit
+# Identity; re-check before applying: kubectl get svc -A -o wide | grep '10.43.0.10'
+#   :8080 ui      tailscale serve svc:sprawl → https://sprawl.tailf67d61.ts.net (owner cookie only)
+#   :8081 device  the Sprawl MCP pod only (device token only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: sprawl
+  namespace: sprawl
+spec:
+  type: ClusterIP
+  clusterIP: 10.43.0.102
+  selector: { app: sprawl }
+  ports:
+    - { name: ui, port: 8080, targetPort: ui }
+    - { name: device, port: 8081, targetPort: device }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: sprawl
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Policies see post-kube-proxy addresses: node-originated traffic (tailscale serve, kubelet probes) arrives from the
+# node's cni0 address, and the MCP arrives as its own pod in app-sprawl-mcp.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sprawl
+  namespace: sprawl
+spec:
+  podSelector:
+    matchLabels: { app: sprawl }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - ipBlock: { cidr: 10.42.0.1/32 }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: app-sprawl-mcp } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+  # No egress rules, with Egress in policyTypes: the API never calls out (link cards are never fetched).
