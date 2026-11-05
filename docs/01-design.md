@@ -450,6 +450,7 @@ Sprawl/
 | React / React DOM | 19.3.1 | |
 | `@xyflow/react` | 12.12.1 | |
 | `elkjs` | 0.12.1 | Runs in a Web Worker |
+| `html-to-image` | 1.11.11 | PNG export of the view; the version React Flow's example pins (5 Nov) |
 | Vite / `@vitejs/plugin-react` | 8.3.5 / 6.2.1 | |
 | TypeScript | 7.0.2 | Type-check only (Vite transpiles). Fall back to 6.0.x if any tool in the chain rejects 7 |
 | Vitest / jsdom / Testing Library | 5.1.0 / 30.1.3 / 16.3.3 | |
@@ -660,7 +661,7 @@ The images ran hardened in Production mode, including a real password + TOTP sig
 - the Restricted namespace and Orbit's catalog onboarding kit, admission policy and render
 - the network policies
 - a backup to restic, then a restore |
-| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests. **P4 (across canvases) built 5 Nov:** `[[Canvas/Card]]` links with backlinks on both sides, collections on the home page. 27 API and 39 web tests. **P5 built 5 Nov (without ink):** history replay (Shift+H) and saved searches |
+| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests. **P4 (across canvases) built 5 Nov:** `[[Canvas/Card]]` links with backlinks on both sides, collections on the home page. 27 API and 39 web tests. **P5 built 5 Nov (without ink):** history replay (Shift+H) and saved searches. PNG export of the view added |
 
 ### What M5 changed from this design
 

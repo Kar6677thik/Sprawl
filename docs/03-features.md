@@ -1,6 +1,6 @@
 # Sprawl feature plan: the best of comparable tools
 
-Written 5 November 2026. **Status: P1–P5 built, except PNG export (P2) and ink (P5), both deferred on purpose.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+Written 5 November 2026. **Status: P1–P5 built, except ink (P5), deferred on purpose.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
 
 ## 1. What the others do best
 
@@ -36,12 +36,12 @@ Left out on purpose: real-time multi-user collaboration (single owner), an in-ap
 - **UI:** the card panel lists links, backlinks, mentions (with "Link") and related cards, each jumping to the card; `[[links]]` in a body are clickable; `#tags` show as chips; the palette filters by `#tag`; an Insights panel (`I`) lists the analysis; text links draw as dashed edges.
 - **MCP prompts:** `find_gaps` and `synthesize_region` turn the analysis into work for Claude.
 
-### P2: Output and presenting (built, except PNG)
+### P2: Output and presenting (built)
 
 - **Export** (`GET /api/v1/canvases/{id}/export`, palette): Markdown (regions as headings, `[[links]]` kept, so it drops into Obsidian) and JSON Canvas 1.0 (absolute geometry, regions as groups, tints as preset colours, card kinds in a `sprawlKind` extension). "Copy canvas as Markdown" puts it on the clipboard for pasting into a chat. `Sprawl.Domain/Exchange.cs`.
 - **Import** (`POST /api/v1/canvases/import`, owner only, "Import…" on the home page): groups become regions (one level of nesting; deeper groups flatten), each node joins the smallest group containing its centre, loose nodes go to *Unsorted*, the first line of text is the title (`?` makes a question, a lone fenced block makes code), link and file nodes become link and note cards, and edges become connections (a label naming a kind sets it). It is one create batch, so placement is Sprawl's own; Tidy afterwards if wanted.
 - **Present** (`P`): top-level regions in reading order, framed one per step; arrows, Space, Home/End, Esc.
-- **Not yet: PNG export.** It needs a DOM-to-image dependency; deferred until it is wanted.
+- **PNG** (palette, "Export view as PNG"): the current view at 2× resolution, so you frame it first (the whole map with Shift+F, or one region with F). Rendering the whole canvas off-screen is not possible as is: React Flow draws only visible nodes, and the zoomed-out map shows region miniatures instead of cards. Uses `html-to-image` 1.11.11, the version React Flow's own export example pins, loaded only when used.
 
 ### P3: Capture and review (built)
 

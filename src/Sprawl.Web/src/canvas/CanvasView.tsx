@@ -244,6 +244,30 @@ function Flow({ canvas, initialFocus }: Props) {
     void flow.fitBounds({ x: region.x, y: region.y, width: region.w, height: region.h }, { padding: 0.08, duration: 500 });
   }, [flow, steps]);
 
+  /** The current view as a PNG at twice screen resolution: frame what you want (the whole map, or one region), then export. */
+  const exportPng = useCallback(async () => {
+    const viewport = document.querySelector<HTMLElement>(".flow .react-flow__viewport");
+    const pane = document.querySelector<HTMLElement>(".flow .react-flow");
+    if (!viewport || !pane) return;
+    try {
+      const { toPng } = await import("html-to-image");
+      const { x, y, zoom } = flow.getViewport();
+      const url = await toPng(viewport, {
+        width: pane.clientWidth,
+        height: pane.clientHeight,
+        pixelRatio: 2,
+        backgroundColor: getComputedStyle(pane).getPropertyValue("--canvas").trim() || getComputedStyle(document.body).backgroundColor,
+        style: { width: `${pane.clientWidth}px`, height: `${pane.clientHeight}px`, transform: `translate(${x}px, ${y}px) scale(${zoom})` },
+      });
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${doc.meta.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "canvas"}.png`;
+      link.click();
+    } catch {
+      canvas.say("The image could not be made.");
+    }
+  }, [canvas, doc.meta.title, flow]);
+
   const download = useCallback((format: "markdown" | "json-canvas") => {
     const link = document.createElement("a");
     link.href = api.exportUrl(doc.meta.id, format);
@@ -305,6 +329,7 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
+    { id: "export-png", group: "Actions", label: "Export view as PNG", hint: "what is on screen, at 2×", run: () => void exportPng() },
     { id: "copy-md", group: "Actions", label: "Copy canvas as Markdown", run: () => void api.exportMarkdown(doc.meta.id)
       .then((text) => navigator.clipboard.writeText(text)).then(() => canvas.say("Copied the canvas as Markdown."), () => canvas.say("Could not copy the canvas.")) },
     { id: "theme", group: "Actions", label: "Switch theme", run: () => applyTheme(nextTheme(readTheme())) },
@@ -312,7 +337,7 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, doc.meta.id, download, flow, openPalette, present, saved, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, download, exportPng, flow, openPalette, present, saved, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
