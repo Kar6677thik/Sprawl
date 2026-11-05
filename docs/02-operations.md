@@ -236,7 +236,7 @@ Tailscale admin console, once:
 1. **Access controls:** add `"tag:ci-sprawl": ["autogroup:admin"]` under `tagOwners`, and the grant `{ "src": ["tag:ci-sprawl"], "dst": ["tag:megatron"], "ip": ["tcp:6443"] }`. That tag reaches nothing else.
 2. **Settings → Trust credentials → Add → OpenID Connect:**
    - issuer GitHub (`https://token.actions.githubusercontent.com`)
-   - subject `repo:Kar6677thik/Sprawl:environment:production` (the deploy job runs in the `production` environment)
+   - subject `repo:Kar6677thik@145130668/Sprawl@1445912618:environment:production`. The repository uses GitHub's immutable OIDC subjects, which carry the owner and repository IDs; the plain `repo:Kar6677thik/Sprawl:…` form never matches and the token exchange fails with 403. The deploy job runs in the `production` environment.
    - tag `tag:ci-sprawl`
    - scope `auth_keys` (write)
 
