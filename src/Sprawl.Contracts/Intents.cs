@@ -47,7 +47,8 @@ public sealed record AddCardIntent(
     string? Tint = null,
     Point? At = null,
     string? Shape = null,
-    string? Detail = null) : Intent;
+    string? Detail = null,
+    string? Icon = null) : Intent;
 
 public sealed record UpdateCardIntent(
     string Id,
@@ -60,7 +61,8 @@ public sealed record UpdateCardIntent(
     string? Emphasis = null,
     string? Tint = null,
     string? Shape = null,
-    string? Detail = null) : Intent;
+    string? Detail = null,
+    string? Icon = null) : Intent;
 
 public sealed record ConnectIntent(string From, string To, string? Kind = null, string? Label = null, string? Line = null, string? Ends = null) : Intent;
 

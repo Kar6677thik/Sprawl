@@ -23,6 +23,8 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         "Write a Mermaid flowchart. First line: 'flowchart TD' (top-down) or 'flowchart LR' (left-right; best for architectures and pipelines). " +
         "Nodes: id[Rectangle] id(Rounded) id([Start/End]) id{Decision?} id[(Database)] id((Event)) id{{Hexagon}} id[/Input or output/] id[[Subroutine]], " +
         "or id@{ shape: cloud | person | doc | h-cyl (queue) | cyl | hex | diam | stadium, label: \"Text\" }. " +
+        "Add an icon to any node with id@{ shape: cyl, label: \"Orders DB\", icon: \"database\" } (user, server, database, cache, queue, api, function, container, " +
+        "globe, phone, lock, shield, mail, load-balancer, bot, …): architectures read much faster with them. " +
         "Edges: A --> B (arrow), A --- B (line), A -.-> B (dashed: async, optional), A ==> B (thick: main path), A <--> B (both ways); " +
         "labels with A -->|label| B or A -- label --> B; chains A --> B --> C; fan-out A --> B & C. " +
         "Group with 'subgraph id [Title]' … 'end' (one level; a subgraph may set 'direction LR'). Styling lines (classDef, style) are ignored. " +

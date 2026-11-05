@@ -8,7 +8,11 @@ public static class ShapeGeometry
     private const int CharWidth = 7;
     private const int LineHeight = 18;
 
-    public static (int W, int H) Size(string shape, string title)
+    public const int IconRow = 28;
+
+    public static bool ShowsIcon(string shape, string? icon) => icon is not null && shape is not (Shapes.Person or Shapes.Text);
+
+    public static (int W, int H) Size(string shape, string title, string? icon = null)
     {
         var maxText = shape is Shapes.Circle ? 96 : shape is Shapes.Diamond ? 150 : 200;
         var oneLine = Math.Max(1, title.Length) * CharWidth;
@@ -29,7 +33,8 @@ public static class ShapeGeometry
             Shapes.Text => (Math.Max(64, textW + 16), Math.Max(32, textH + 10)),
             _ => (Math.Max(120, textW + 40), Math.Max(56, textH + 30))
         };
-        if (shape == Shapes.Circle) h = w;
+        if (ShowsIcon(shape, icon)) h += shape == Shapes.Diamond ? IconRow + 12 : IconRow;
+        if (shape == Shapes.Circle) h = w = Math.Max(w, h);
         return (Round(Math.Min(w, 320)), Round(h));
     }
 

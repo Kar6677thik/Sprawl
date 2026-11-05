@@ -14,7 +14,7 @@ namespace Sprawl.Domain;
 /// </summary>
 public static partial class Mermaid
 {
-    public sealed record Node(string Id, string Label, string Shape, string? Subgraph);
+    public sealed record Node(string Id, string Label, string Shape, string? Subgraph, string? Icon = null);
     public sealed record Edge(string From, string To, string? Label, string Line, string Ends);
     public sealed record Subgraph(string Id, string Title, string? Layout);
     public sealed record Chart(string Layout, IReadOnlyList<Node> Nodes, IReadOnlyList<Edge> Edges, IReadOnlyList<Subgraph> Subgraphs);
@@ -65,7 +65,7 @@ public static partial class Mermaid
         var subgraphs = new List<Subgraph>();
         var stack = new Stack<string>();   // open subgraphs; only the outermost one becomes a sub-region
 
-        void Declare(string id, string? label, string? shape)
+        void Declare(string id, string? label, string? shape, string? icon)
         {
             var subgraph = stack.Count == 0 ? null : stack.Last();
             if (nodes.TryGetValue(id, out var existing))
@@ -74,13 +74,14 @@ public static partial class Mermaid
                 {
                     Label = label ?? existing.Label,
                     Shape = shape ?? existing.Shape,
+                    Icon = icon ?? existing.Icon,
                     Subgraph = existing.Subgraph ?? subgraph
                 };
                 return;
             }
             if (subgraphs.Any(s => s.Id == id) && label is null && shape is null) return; // an edge to a subgraph
             if (nodes.Count >= Limits.DiagramNodes) throw SprawlException.Limit($"A diagram holds at most {Limits.DiagramNodes} nodes.");
-            nodes[id] = new Node(id, label ?? id, shape ?? Shapes.Rectangle, subgraph);
+            nodes[id] = new Node(id, label ?? id, shape ?? Shapes.Rectangle, subgraph, icon);
             order.Add(id);
         }
 
@@ -115,12 +116,12 @@ public static partial class Mermaid
         var subgraphIds = subgraphs.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var edge in edges)
             foreach (var end in new[] { edge.From, edge.To })
-                if (!nodes.ContainsKey(end) && !subgraphIds.Contains(end)) Declare(end, null, null);
+                if (!nodes.ContainsKey(end) && !subgraphIds.Contains(end)) Declare(end, null, null, null);
         return new Chart(layout, [.. order.Select(id => nodes[id])], edges, subgraphs);
     }
 
     /// <summary>One statement: node groups joined by edges, e.g. <c>A[Start] --&gt;|go| B &amp; C --&gt; D</c>.</summary>
-    private static void ParseChain(string text, Action<string, string?, string?> declare, List<Edge> edges)
+    private static void ParseChain(string text, Action<string, string?, string?, string?> declare, List<Edge> edges)
     {
         var position = 0;
         var previous = ReadGroup(text, ref position, declare);
@@ -139,7 +140,7 @@ public static partial class Mermaid
         }
     }
 
-    private static List<string> ReadGroup(string text, ref int position, Action<string, string?, string?> declare)
+    private static List<string> ReadGroup(string text, ref int position, Action<string, string?, string?, string?> declare)
     {
         var ids = new List<string>();
         while (true)
@@ -148,8 +149,8 @@ public static partial class Mermaid
             var id = NodeId().Match(text, position);
             if (!id.Success || id.Index != position) return ids;
             position += id.Length;
-            var (label, shape) = ReadShape(text, ref position);
-            declare(id.Value, label, shape);
+            var (label, shape, icon) = ReadShape(text, ref position);
+            declare(id.Value, label, shape, icon);
             ids.Add(id.Value);
             SkipSpace(text, ref position);
             if (position < text.Length && text[position] == '&') { position++; continue; }
@@ -165,7 +166,7 @@ public static partial class Mermaid
         ("{", ["}"], Shapes.Diamond), (">", ["]"], Shapes.Rectangle)
     ];
 
-    private static (string? Label, string? Shape) ReadShape(string text, ref int position)
+    private static (string? Label, string? Shape, string? Icon) ReadShape(string text, ref int position)
     {
         if (position < text.Length - 1 && text[position] == '@' && text[position + 1] == '{')
         {
@@ -175,7 +176,10 @@ public static partial class Mermaid
             position = close + 1;
             var shape = Property().Matches(body).FirstOrDefault(m => m.Groups[1].Value == "shape")?.Groups[2].Value;
             var label = Property().Matches(body).FirstOrDefault(m => m.Groups[1].Value == "label")?.Groups[2].Value;
-            return (label is null ? null : CleanLabel(label), shape is null ? null : NamedShape(shape.Trim('"', '\'', ' ')));
+            var icon = Property().Matches(body).FirstOrDefault(m => m.Groups[1].Value == "icon")?.Groups[2].Value;
+            var known = icon is null ? null : IconNames.Normalize(icon.Trim('"', '\'', ' '));
+            return (label is null ? null : CleanLabel(label), shape is null ? null : NamedShape(shape.Trim('"', '\'', ' ')),
+                known is not null && Icons.All.Contains(known) ? known : null);
         }
         foreach (var (open, closers, shape) in Brackets)
         {
@@ -198,9 +202,9 @@ public static partial class Mermaid
             if (end < 0) throw SprawlException.Invalid($"A Mermaid node shape '{open}' is not closed.");
             var label = CleanLabel(text[start..end]);
             position = end + closeLength;
-            return (label, shape);
+            return (label, shape, null);
         }
-        return (null, null);
+        return (null, null, null);
     }
 
     private sealed record Link(string? Label, string Line, string Ends);
@@ -241,7 +245,7 @@ public static partial class Mermaid
         void Nodes(string regionId, string indent)
         {
             foreach (var card in OutlineRenderer.ReadingOrder(state.CardsIn(regionId)))
-                md.Append(indent).Append(Id(card.Id)).Append(Wrap(card.Shape ?? Shapes.Rounded, card.Title)).Append('\n');
+                md.Append(indent).Append(Id(card.Id)).Append(Wrap(card.Shape ?? Shapes.Rounded, card.Title, card.Icon)).Append('\n');
         }
         Nodes(region.Id, "  ");
         foreach (var sub in OutlineRenderer.ReadingOrder(state.RegionsIn(region.Id)))
@@ -275,9 +279,10 @@ public static partial class Mermaid
         return md.ToString();
     }
 
-    private static string Wrap(string shape, string title)
+    private static string Wrap(string shape, string title, string? icon = null)
     {
         var t = "\"" + Escape(title) + "\"";
+        if (icon is not null) return $"@{{ shape: {MermaidShape(shape)}, label: {t}, icon: \"{icon}\" }}";
         return shape switch
         {
             Shapes.Rectangle or Shapes.Text => $"[{t}]",
@@ -296,6 +301,13 @@ public static partial class Mermaid
             _ => $"({t})"
         };
     }
+
+    private static string MermaidShape(string shape) => shape switch
+    {
+        Shapes.Rectangle or Shapes.Text => "rect", Shapes.Terminal or Shapes.Person => "stadium", Shapes.Subroutine => "subproc", Shapes.Cylinder => "cyl",
+        Shapes.Circle or Shapes.Ellipse => "circle", Shapes.Diamond => "diam", Shapes.Hexagon => "hex", Shapes.Parallelogram => "lean-r",
+        Shapes.Document => "doc", Shapes.Cloud => "cloud", Shapes.Queue => "h-cyl", _ => "rounded"
+    };
 
     private static string Escape(string text) => text.Replace("\"", "#quot;", StringComparison.Ordinal);
 

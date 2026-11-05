@@ -128,7 +128,7 @@ public static class OutlineRenderer
                 if (emitted >= maxCards) { omitted[regionKey] = omitted.GetValueOrDefault(regionKey) + 1; continue; }
                 emitted++;
                 included.Add(card.Id);
-                output.Append("- ").Append(card.Id).Append(' ').Append(card.Shape is null ? KindLabel(card.Kind) : $"[{card.Shape}]").Append(' ');
+                output.Append("- ").Append(card.Id).Append(' ').Append(card.Shape is null ? KindLabel(card.Kind) : $"[{card.Shape}]").Append(card.Icon is null ? "" : $" (icon {card.Icon})").Append(' ');
                 if (card.Emphasis == Emphases.Key) output.Append("★ ");
                 output.Append(card.Title);
                 if (card.Detail is not null) output.Append(" [details: ").Append(card.Detail).Append(']');

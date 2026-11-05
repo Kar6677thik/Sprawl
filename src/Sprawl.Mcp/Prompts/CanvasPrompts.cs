@@ -138,6 +138,30 @@ public sealed class CanvasPrompts
             """;
     }
 
+    [McpServerPrompt(Name = "check_my_map", Title = "Check a map I drew")]
+    [Description("Check a concept map, flowchart or causal-loop diagram the learner drew themselves: what is right, what is missing, what points the wrong way.")]
+    public static string CheckMyMap(
+        [Description("The canvas id (cv_…) or title.")] string canvas,
+        [Description("The region holding the map (title or id).")] string region,
+        [Description("Optional: what the map is meant to explain, if the region title does not say.")] string? topic = null)
+    {
+        var about = string.IsNullOrWhiteSpace(topic) ? "" : " It is meant to explain: " + topic + ".";
+        return $"""
+            The learner drew the map in region "{region}" of the Sprawl canvas "{canvas}" themselves, to test their understanding.{about}
+            1. Read it with get_canvas (depth=full, connections included). Treat it as their work: do not change, move or delete anything in it.
+            2. Check it as a tutor would, against what is true about the topic:
+               - which ideas and links are right (say so first, specifically);
+               - important ideas that are missing;
+               - links that are missing, point the wrong way, have the wrong kind or label, or connect things that are not related;
+               - in a causal-loop diagram, links with the wrong sign (+ or -), and loops named reinforcing that are balancing or the reverse.
+            3. Do not hand over the answer at once. For each problem, ask a question that leads the learner to see it (a cognitive gate), and
+               add it as a question card in a region "Map feedback", connected to the item it is about.
+            4. Only if the learner asks for it, draw the corrected map as a separate diagram ("{region} (suggested)") next to theirs, with a
+               walkthrough whose steps mark what changed (marks: added, removed, changed), so they can compare the two.
+            End with a short verdict: what they clearly understand, and the one thing to revisit first.
+            """;
+    }
+
     [McpServerPrompt(Name = "quiz_me", Title = "Quiz me (mock interview)")]
     [Description("Quiz the learner from a canvas, one question at a time, grading answers against the cards and recording weak spots.")]
     public static string QuizMe(

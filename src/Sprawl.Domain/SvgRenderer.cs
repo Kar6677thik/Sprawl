@@ -93,6 +93,13 @@ public static class SvgRenderer
                 Shapes.Cylinder => (b.Y + b.H / 2 + 8, b.W - 24),
                 _ => (b.Y + b.H / 2, b.W - 28)
             };
+            if (ShapeGeometry.ShowsIcon(shape, card.Icon) && IconPaths.Markup.TryGetValue(card.Icon!, out var icon))
+            {
+                // The icon sits above the label; together they stay centred where the label alone would be.
+                textY += ShapeGeometry.IconRow / 2.0;
+                var iconY = textY - Lines(card.Title, maxWidth) * 9 - 26;
+                sb.Append($"<g class=\"icon\" transform=\"translate({N(b.X + b.W / 2 - 10)} {N(iconY)}) scale(0.8333)\">{icon}</g>");
+            }
             sb.Append(Lines(card.Title, b.X + b.W / 2, textY, maxWidth, "label", center: true, maxLines: 3));
         }
         else
@@ -229,6 +236,8 @@ public static class SvgRenderer
         return horizontal ? (dx > 0 ? box.X + box.W : box.X, cy, true) : (cx, dy > 0 ? box.Y + box.H : box.Y, false);
     }
 
+    private static int Lines(string text, double maxWidth) => Math.Min(3, Wrap(text, Math.Max(4, (int)(maxWidth / 7.0)), 3).Count);
+
     private static string Lines(string text, double x, double y, double maxWidth, string cls, bool center, int maxLines)
     {
         var perLine = Math.Max(4, (int)(maxWidth / (cls == "card-body" ? 6.3 : 7.0)));
@@ -278,6 +287,7 @@ public static class SvgRenderer
         .group-title { fill: var(--muted); font-size: 13px; font-weight: 600; }
         .shape { fill: var(--surface); stroke: var(--stroke); stroke-width: 1.5; stroke-linejoin: round; }
         .detail { fill: none; stroke: var(--stroke); stroke-width: 1.5; }
+        .icon { fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
         .key .shape, .key .card { stroke-width: 2.5; }
         .card { fill: var(--surface); stroke: var(--group); stroke-width: 1; }
         .label { fill: var(--text); font-size: 13px; font-weight: 550; }

@@ -63,6 +63,8 @@ export interface Card {
   shape?: Shape | null;
   /** A region that explains this card in detail (zooming in opens it). */
   detail?: string | null;
+  /** One of Sprawl's icons (canvas/icons.ts), drawn on a shape or in a card's header. */
+  icon?: string | null;
 }
 
 export interface Connection {
@@ -203,7 +205,7 @@ export type Intent =
   | { type: "addRegion"; title: string; ref?: string; parent?: string; tint?: string; near?: string; layout?: RegionLayout }
   | { type: "addCard"; kind: CardKind; title: string; region?: string; ref?: string; body?: string; url?: string; language?: string; at?: { x: number; y: number }; shape?: Shape }
   | { type: "moveCards"; ids: string[]; toRegion: string }
-  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string; shape?: Shape | "none"; detail?: string }
+  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string; shape?: Shape | "none"; detail?: string; icon?: string }
   | { type: "connect"; from: string; to: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
   | { type: "updateConnection"; id: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
   | { type: "addDiagram"; title: string; mermaid: string; ref?: string; parent?: string; near?: string; layout?: RegionLayout; replace?: boolean }

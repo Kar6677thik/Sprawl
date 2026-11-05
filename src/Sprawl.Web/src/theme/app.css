@@ -365,3 +365,17 @@ input::placeholder { color: var(--text-faint); }
 .react-flow__edge.mark-removed .react-flow__edge-path { opacity: 0.4; stroke-dasharray: 3 4 !important; }
 .react-flow__edge.mark-changed .react-flow__edge-path { stroke: oklch(0.55 0.15 295) !important; }
 .flow.is-walking .react-flow__node-region:not(.is-lit) .loop-badge { opacity: 0.2; }
+
+/* Icons: above a shape's label, or in a card's header. */
+.shape-content { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; pointer-events: none; }
+.shape-content .shape-label { max-width: none; }
+.shape-node .shape-content { max-width: calc(100% - 28px); }
+.shape-diamond .shape-content { max-width: 62%; }
+.shape-circle .shape-content { max-width: 76%; }
+.shape-glyph { color: var(--text-muted); flex: none; }
+.shape-node[data-tint] .shape-glyph { color: var(--tint); }
+.card-icon { color: var(--text-muted); flex: none; }
+.icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 4px; max-height: 148px; overflow: auto; padding: 2px; }
+.icon-picker button { display: grid; place-items: center; height: 32px; padding: 0; border-radius: 8px; color: var(--text-muted); }
+.icon-picker button.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.flow.is-sketch .shape-glyph { filter: url(#sketch-filter); }

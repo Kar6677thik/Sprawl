@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Ends, Intent, LineStyle } from "../api/types";
 import { SHAPES, ShapeIcon } from "./shapes";
+import { Icon } from "./Icon";
+import { ICON_NAMES } from "./icons";
 import { MermaidView } from "./MermaidView";
 import { ChartView } from "./ChartView";
 import { CardLinks } from "./CardLinks";
@@ -88,6 +90,21 @@ function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "
               <button key={shape} type="button" role="radio" aria-checked={card.shape === shape} className={card.shape === shape ? "is-on" : ""} title={label} aria-label={label}
                 onClick={() => { if (card.shape !== shape) update({ shape }); }}>
                 <ShapeIcon shape={shape} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <span>Icon</span>
+          <div className="icon-picker" role="radiogroup" aria-label="Icon">
+            <button type="button" role="radio" aria-checked={!card.icon} className={!card.icon ? "is-on" : ""} title="No icon"
+              onClick={() => { if (card.icon) update({ icon: "none" }); }}>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 19 19 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            </button>
+            {ICON_NAMES.map((name) => (
+              <button key={name} type="button" role="radio" aria-checked={card.icon === name} className={card.icon === name ? "is-on" : ""} title={name} aria-label={name}
+                onClick={() => { if (card.icon !== name) update({ icon: name }); }}>
+                <Icon name={name} size={18} />
               </button>
             ))}
           </div>

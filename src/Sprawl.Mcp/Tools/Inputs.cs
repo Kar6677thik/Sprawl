@@ -154,7 +154,9 @@ public sealed record CardInput(
     [property: Description("For code cards: the language, e.g. \"csharp\".")] string? Language = null,
     [property: Description("key marks a central idea.")] Emphasis? Emphasis = null,
     [property: Description("Optional quiet tint.")] Tint? Tint = null,
-    [property: Description("Draw the card as a diagram shape: rectangle (step, component), rounded (service), terminal (start/end), diamond (decision), circle (event), ellipse, cylinder (database/store), parallelogram (input/output), hexagon (preparation), document, cloud (external system), person (user/actor), queue (queue/stream/topic), subroutine (predefined process), text (bare label). In a diagram region the shape is sized to its title.")] Shape? Shape = null);
+    [property: Description("Draw the card as a diagram shape: rectangle (step, component), rounded (service), terminal (start/end), diamond (decision), circle (event), ellipse, cylinder (database/store), parallelogram (input/output), hexagon (preparation), document, cloud (external system), person (user/actor), queue (queue/stream/topic), subroutine (predefined process), text (bare label). In a diagram region the shape is sized to its title.")] Shape? Shape = null,
+    [property: Description("Optional icon drawn on the shape (or in the card's header) to say what a component is at a glance: user, users, server, database, " +
+        "cache, queue, cloud, api, function, container, globe, phone, lock, key, shield, mail, load-balancer, bot, brain, … Use them in architecture diagrams.")] IconName? Icon = null);
 
 public sealed record ConnectionInput(
     [property: Description("Source: a ref from this call or a card/region id.")] string From,
@@ -175,7 +177,8 @@ public sealed record CardUpdate(
     Emphasis? Emphasis = null,
     Tint? Tint = null,
     [property: Description("A diagram shape, or none to make it a plain card again.")] Shape? Shape = null,
-    [property: Description("A region (id or title) that explains this card in detail, opened when the owner zooms into the card; none removes the link.")] string? Detail = null);
+    [property: Description("A region (id or title) that explains this card in detail, opened when the owner zooms into the card; none removes the link.")] string? Detail = null,
+    [property: Description("An icon for the shape or card, or none to remove it.")] IconName? Icon = null);
 
 public sealed record ConnectionUpdate(
     [property: Description("The connection id (cx_…), as listed in get_canvas or get_cards.")] string ConnectionId,
@@ -239,6 +242,12 @@ internal static class Map
 
     public static string? Tint(Tint? tint) => tint?.ToString().ToLowerInvariant();
     public static string? Shape(Shape? shape) => shape?.ToString().ToLowerInvariant();
+    public static string? Icon(IconName? icon) => icon switch
+    {
+        null => null,
+        IconName.None => "none",
+        _ => System.Text.RegularExpressions.Regex.Replace(icon.Value.ToString(), "(?<!^)([A-Z])", "-$1").ToLowerInvariant()
+    };
     public static string? Line(LineStyle? line) => line?.ToString().ToLowerInvariant();
     public static string? Ends(Arrowheads? ends) => ends?.ToString().ToLowerInvariant();
     public static StepMark Mark(MarkInput mark, Func<string, string>? name = null) =>
@@ -259,7 +268,7 @@ internal static class Map
     public static IEnumerable<Intent> Additions(IReadOnlyList<RegionInput>? regions, IReadOnlyList<CardInput>? cards, IReadOnlyList<ConnectionInput>? connections)
     {
         foreach (var r in regions ?? []) yield return new AddRegionIntent(r.Title, r.Ref, r.Parent, Tint(r.Tint), Layout: Layout(r.Layout));
-        foreach (var c in cards ?? []) yield return new AddCardIntent(Kind(c.Kind), c.Title, c.Region, c.Ref, c.Body, c.Url, c.Language, Emphasis(c.Emphasis), Tint(c.Tint), Shape: Shape(c.Shape));
+        foreach (var c in cards ?? []) yield return new AddCardIntent(Kind(c.Kind), c.Title, c.Region, c.Ref, c.Body, c.Url, c.Language, Emphasis(c.Emphasis), Tint(c.Tint), Shape: Shape(c.Shape), Icon: Icon(c.Icon));
         foreach (var e in connections ?? []) yield return new ConnectIntent(e.From, e.To, e.Kind is null ? null : Kind(e.Kind.Value), e.Label, Line(e.Line), Ends(e.Ends));
     }
 

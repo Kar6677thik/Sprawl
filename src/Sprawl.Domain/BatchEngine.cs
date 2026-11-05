@@ -349,7 +349,7 @@ public sealed partial class BatchEngine
         var id = NewId(EntityKind.Card);
         var card = Sized(new Card(id, region?.Id, kind, title, body, url, language, Text.Tint(add.Tint), Text.Emphasis(add.Emphasis), size,
             0, 0, Geometry.CardWidth, Geometry.HeightOf(size), Placements.Auto, Placements.Auto, actor.Author, actor.Author, now, now, Text.Shape(add.Shape),
-            add.Detail is null ? null : RequireRegion(add.Detail).Id));
+            add.Detail is null ? null : RequireRegion(add.Detail).Id, Text.Icon(add.Icon)));
         if (add.At is { } at)
         {
             var (x, y) = Clamp(at.X, at.Y, region is not null);
@@ -387,7 +387,8 @@ public sealed partial class BatchEngine
             Emphasis = update.Emphasis is null ? card.Emphasis : Text.Emphasis(update.Emphasis),
             Tint = update.Tint is null ? card.Tint : Text.Tint(update.Tint),
             Shape = update.Shape is null ? card.Shape : Text.Shape(update.Shape),
-            Detail = update.Detail is null ? card.Detail : update.Detail.Trim().ToLowerInvariant() == "none" ? null : RequireRegion(update.Detail).Id
+            Detail = update.Detail is null ? card.Detail : update.Detail.Trim().ToLowerInvariant() == "none" ? null : RequireRegion(update.Detail).Id,
+            Icon = update.Icon is null ? card.Icon : Text.Icon(update.Icon)
         };
         if (updated == card) return;
         Resize(card, updated with { UpdatedAt = now, UpdatedBy = actor.Author });
@@ -563,7 +564,7 @@ public sealed partial class BatchEngine
         {
             var target = nested && node.Subgraph is not null ? GroupRef(node.Subgraph) : region.Id;
             var title = Clip(node.Label, Limits.CardTitle);
-            AddCard(new AddCardIntent(CardKinds.Note, title, target, NodeRef(node.Id), title == node.Label ? null : node.Label, Shape: node.Shape), diagramNode: true);
+            AddCard(new AddCardIntent(CardKinds.Note, title, target, NodeRef(node.Id), title == node.Label ? null : node.Label, Shape: node.Shape, Icon: node.Icon), diagramNode: true);
             // Everything in one batch shares a timestamp; a tick per node keeps the Mermaid order, which the layout and the outline read.
             var created = state.Cards[refs[NodeRef(node.Id)]];
             state.Cards[created.Id] = created with { CreatedAt = now.AddTicks(++sequence), UpdatedAt = now.AddTicks(sequence) };
@@ -684,7 +685,7 @@ public sealed partial class BatchEngine
         }
         if (card.Shape is { } shape)
         {
-            var (w, h) = ShapeGeometry.Size(shape, card.Title);
+            var (w, h) = ShapeGeometry.Size(shape, card.Title, card.Icon);
             return inDiagram ? card with { Size = CardSizes.Compact, W = w, H = h }
                 : card with { Size = CardSizes.Compact, W = Geometry.CardWidth, H = Math.Max(Geometry.CompactHeight, h) };
         }
@@ -974,6 +975,7 @@ public static partial class Text
 
     public static string Kind(string value) => OneOf(value, CardKinds.All, "card kind");
     public static string? Shape(string? value) => value is null || value.Trim().ToLowerInvariant() == Shapes.None ? null : OneOf(value, Shapes.All, "shape");
+    public static string? Icon(string? value) => value is null || value.Trim().ToLowerInvariant() == "none" ? null : OneOf(IconNames.Normalize(value), Icons.All, "icon");
     public static string? Layout(string? value) => value is null ? null : OneOf(value, RegionLayouts.All, "layout") is var l && l == RegionLayouts.Cards ? null : l;
     public static string? Line(string? value) => value is null ? null : OneOf(value, LineStyles.All, "line style") is var l && l == LineStyles.Solid ? null : l;
     public static string? Ends(string? value) => value is null ? null : OneOf(value, EndStyles.All, "ends");

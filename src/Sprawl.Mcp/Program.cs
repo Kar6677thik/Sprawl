@@ -248,7 +248,7 @@ namespace Sprawl.Mcp
               loop R1 (reinforcing) or B1 (balancing); get_canvas lists them. Explain each loop in a walkthrough step that highlights it.
             - Scenarios: a walkthrough step may mark items down, slow, hot, added, removed or changed (with a short note), so one architecture
               tells "normal", "the broker is down" and "the retry storm" without copies. Use it for failure modes, migrations and before/after.
-            - Teaching: the teach_me and quiz_me prompts turn a canvas into a lesson or a mock interview.
+            - Teaching: the teach_me and quiz_me prompts turn a canvas into a lesson or a mock interview; check_my_map reviews a map the owner drew.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.
             - Batch related additions into one add_to_canvas call, with refs for cross-references and a requestId so a retry is not applied twice.

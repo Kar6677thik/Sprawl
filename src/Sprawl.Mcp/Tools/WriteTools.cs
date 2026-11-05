@@ -86,7 +86,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
         {
             Map.Count(updates.Count, 50, "update");
             var intents = updates.Select(u => (Intent)new UpdateCardIntent(u.CardId, u.Title, u.Body, u.AppendBody, u.Kind is null ? null : Map.Kind(u.Kind.Value),
-                u.Url, u.Language, Map.Emphasis(u.Emphasis), Map.Tint(u.Tint), Map.Shape(u.Shape), u.Detail)).ToList();
+                u.Url, u.Language, Map.Emphasis(u.Emphasis), Map.Tint(u.Tint), Map.Shape(u.Shape), u.Detail, Map.Icon(u.Icon))).ToList();
             return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token));
         }, token);
 

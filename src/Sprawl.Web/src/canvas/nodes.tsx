@@ -9,6 +9,7 @@ import { ChartView } from "./ChartView";
 import { currentTheme } from "./MermaidView";
 import type { LoopBadge } from "./loops";
 import type { StepMark } from "../api/types";
+import { Icon } from "./Icon";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
 
@@ -202,7 +203,10 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
         <svg className="shape-svg" width={card.w} height={card.h} viewBox={`0 0 ${card.w} ${card.h}`} aria-hidden="true">
           {shapeOutline(card.shape, card.w, card.h, 1.5)}
         </svg>
-        <span className="shape-label">{card.title}</span>
+        <div className="shape-content">
+          {card.shape !== "person" && card.shape !== "text" && <Icon name={card.icon} className="shape-glyph" />}
+          <span className="shape-label">{card.title}</span>
+        </div>
       </div>
     );
   }
@@ -221,7 +225,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
       {level !== "far" && (
         <>
           <header className="card-header">
-            <KindGlyph kind={card.kind} />
+            {card.icon ? <Icon name={card.icon} size={14} className="card-icon" /> : <KindGlyph kind={card.kind} />}
             <h3 className="card-title">{card.title}</h3>
           </header>
           {level === "near" && card.kind === "link" && card.url && (
