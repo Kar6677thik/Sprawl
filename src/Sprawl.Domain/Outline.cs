@@ -87,8 +87,10 @@ public static class OutlineRenderer
         {
             included.Add(region.Id);
             var cards = state.CardsIn(region.Id).ToList();
+            var sketches = state.Sketches.Values.Count(s => s.RegionId == region.Id);
             output.Append('\n').Append('#', level).Append(' ').Append(region.Title).Append("  ").Append(region.Id)
-                .Append("  (").Append(cards.Count).Append(cards.Count == 1 ? " card)" : " cards)").Append('\n');
+                .Append("  (").Append(cards.Count).Append(cards.Count == 1 ? " card" : " cards")
+                .Append(sketches == 0 ? "" : sketches == 1 ? ", 1 sketch by the owner" : $", {sketches} sketches by the owner").Append(")\n");
             if (depth != OutlineDepths.Regions) WriteCards(cards, region.Id);
         }
 

@@ -1,4 +1,4 @@
-import { kindOf, type Card, type CanvasDocument, type CanvasEvent, type CanvasMeta, type Connection, type Region } from "../api/types";
+import { kindOf, type Card, type CanvasDocument, type CanvasEvent, type CanvasMeta, type Connection, type Region, type Sketch } from "../api/types";
 
 export type ApplyResult =
   | { status: "applied"; doc: CanvasDocument; added: string[] }
@@ -16,6 +16,7 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
   const regions = new Map(doc.regions.map((r) => [r.id, r]));
   const cards = new Map(doc.cards.map((c) => [c.id, c]));
   const connections = new Map(doc.connections.map((c) => [c.id, c]));
+  const sketches = new Map((doc.sketches ?? []).map((s) => [s.id, s]));
   let meta = doc.meta;
   const added: string[] = [];
   for (const op of event.ops) {
@@ -34,6 +35,9 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
       case "connection":
         set(connections, op.entityId, after as Connection | null);
         break;
+      case "sketch":
+        set(sketches, op.entityId, after as Sketch | null);
+        break;
     }
   }
   return {
@@ -47,6 +51,7 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
       regions: orderRegions([...regions.values()]),
       cards: [...cards.values()],
       connections: [...connections.values()],
+      sketches: [...sketches.values()],
     },
   };
 }
@@ -73,11 +78,12 @@ export function canRebase(base: CanvasDocument, fresh: CanvasDocument, entityIds
   });
 }
 
-export function find(doc: CanvasDocument, id: string): Region | Card | Connection | undefined {
+export function find(doc: CanvasDocument, id: string): Region | Card | Connection | Sketch | undefined {
   switch (kindOf(id)) {
     case "region": return doc.regions.find((r) => r.id === id);
     case "card": return doc.cards.find((c) => c.id === id);
     case "connection": return doc.connections.find((c) => c.id === id);
+    case "sketch": return doc.sketches?.find((s) => s.id === id);
     default: return undefined;
   }
 }
@@ -100,6 +106,10 @@ export function moveLocally(doc: CanvasDocument, moves: { id: string; x: number;
       if (!m) return c;
       const regionId = m.container === undefined ? c.regionId : m.container === "canvas" ? null : m.container;
       return { ...c, x: m.x, y: m.y, regionId, placement: regionId === null ? "manual" : placement(m) };
+    }),
+    sketches: (doc.sketches ?? []).map((s) => {
+      const m = byId.get(s.id);
+      return m ? { ...s, x: m.x, y: m.y } : s;
     }),
   };
 }

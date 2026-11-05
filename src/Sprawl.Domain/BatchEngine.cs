@@ -89,6 +89,9 @@ public sealed partial class BatchEngine
         }
         if (state.Cards.Count > Limits.CardsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.CardsPerCanvas} cards.");
         if (state.Regions.Count > Limits.RegionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.RegionsPerCanvas} regions.");
+        // A sketch lives inside its region: when a merge or delete removes the region, its sketches go with it.
+        foreach (var orphan in state.Sketches.Values.Where(s => s.RegionId is not null && !state.Regions.ContainsKey(s.RegionId)).ToList()) state.Sketches.Remove(orphan.Id);
+        if (state.Sketches.Count > Limits.SketchesPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.SketchesPerCanvas} sketches.");
         if (state.Connections.Count > Limits.ConnectionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.ConnectionsPerCanvas} connections.");
         var ops = StateOps.Diff(original, state);
         return new(ops, refs, skipped, [.. notes, .. layout.Warnings], Summaries.Describe(ops, original, state, kind));
@@ -115,6 +118,8 @@ public sealed partial class BatchEngine
             case UpdateCanvasIntent update: UpdateCanvas(update); break;
             case SetLayoutIntent set: SetLayout(set); break;
             case UnpinIntent unpin: Unpin(unpin); break;
+            case AddSketchIntent add: AddSketch(add); break;
+            case DeleteSketchesIntent delete: DeleteSketches(delete); break;
             default: throw SprawlException.Invalid("Unknown intent.");
         }
     }
@@ -511,7 +516,8 @@ public sealed partial class BatchEngine
             {
                 case EntityKind.Card: SetCardLayout(RequireCard(item.Id), item); break;
                 case EntityKind.Region: SetRegionLayout(RequireRegion(item.Id), item); break;
-                default: throw SprawlException.Invalid($"'{item.Id}' is not a card or region.");
+                case EntityKind.Sketch: SetSketchLayout(item); break;
+                default: throw SprawlException.Invalid($"'{item.Id}' is not a card, region or sketch.");
             }
         }
     }
@@ -554,6 +560,39 @@ public sealed partial class BatchEngine
         layout.Touch(region.Id);
         state.Regions[region.Id] = region with { X = x, Y = y, Placement = item.AsAuto ? Placements.Auto : Placements.Manual };
         layout.Touch(region.Id);
+    }
+
+    private void AddSketch(AddSketchIntent add)
+    {
+        if (!actor.IsOwner) throw SprawlException.Forbidden("Only the owner draws.");
+        var path = Text.SketchPath(add.Path);
+        if (add.W is < 1 or > Limits.SketchSize || add.H is < 1 or > Limits.SketchSize) throw SprawlException.Invalid($"A sketch box is 1-{Limits.SketchSize} pixels on each side.");
+        var region = add.Region is null ? null : RequireRegion(add.Region);
+        var id = NewId(EntityKind.Sketch);
+        if (add.Ref is not null) ValidateRef(add.Ref);
+        MapRef(add.Ref, id);
+        state.Sketches[id] = new Sketch(id, region?.Id, path, Text.Tint(add.Tint), Math.Clamp(add.Stroke ?? 2, 1, 24),
+            (int)Math.Round(add.X), (int)Math.Round(add.Y), add.W, add.H, actor.Author, now);
+    }
+
+    private void DeleteSketches(DeleteSketchesIntent delete)
+    {
+        if (!actor.IsOwner) throw SprawlException.Forbidden("Only the owner erases sketches.");
+        foreach (var id in delete.Ids)
+            if (!state.Sketches.Remove(id)) skipped.Add(new("missing", null, id));
+    }
+
+    /// <summary>A dragged sketch: a new position in the same container, or into another region / onto the canvas.</summary>
+    private void SetSketchLayout(LayoutItem item)
+    {
+        var sketch = state.Sketches.GetValueOrDefault(item.Id) ?? throw SprawlException.NotFound($"Sketch '{item.Id}' was not found.");
+        var regionId = item.Container switch
+        {
+            null => sketch.RegionId,
+            "canvas" => null,
+            var target => RequireRegion(target).Id
+        };
+        state.Sketches[sketch.Id] = sketch with { RegionId = regionId, X = (int)Math.Round(item.X), Y = (int)Math.Round(item.Y) };
     }
 
     private void Unpin(UnpinIntent unpin)
@@ -724,9 +763,18 @@ public static partial class Text
     /// <summary>Titles compare case-insensitively, ignoring whitespace runs and trailing punctuation.</summary>
     public static bool SameTitle(string a, string b) => string.Equals(Normalize(a), Normalize(b), StringComparison.Ordinal);
 
+    /// <summary>SVG path data restricted to move, line, curve and close commands and numbers: nothing that can script or link.</summary>
+    public static string SketchPath(string? value)
+    {
+        var path = (value ?? "").Trim();
+        if (path.Length == 0 || path.Length > Limits.SketchPath) throw SprawlException.Invalid($"A sketch path is 1-{Limits.SketchPath} characters.");
+        return SketchPathChars().IsMatch(path) && path[0] is 'M' or 'm' ? path : throw SprawlException.Invalid("A sketch path holds only M, L, Q, C and Z commands and numbers, starting with M.");
+    }
+
     public static string Normalize(string title) => Whitespace().Replace(title.Trim().ToLowerInvariant(), " ").TrimEnd('.', '?', '!', ':', ';', ',');
 
     [GeneratedRegex(@"\s+")] private static partial Regex Whitespace();
+    [GeneratedRegex(@"^[MLQCZmlqcz0-9.,\s-]+$")] private static partial Regex SketchPathChars();
     [GeneratedRegex(@"[\s_]+")] private static partial Regex TagSeparators();
     [GeneratedRegex(@"^[\p{Ll}\p{Lo}\p{Nd}]+(?:-[\p{Ll}\p{Lo}\p{Nd}]+)*$")] private static partial Regex TagName();
     [GeneratedRegex(@"^[a-z0-9][a-z0-9+#.-]*$")] private static partial Regex LanguageName();

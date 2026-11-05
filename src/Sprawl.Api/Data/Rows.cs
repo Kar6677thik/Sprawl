@@ -14,6 +14,7 @@ public static class Rows
     private const string RegionColumns = "id, parent_id, title, tint, cols, x, y, w, h, placement, created_by, created_at, updated_at";
     private const string CardColumns = "id, region_id, kind, title, body, url, language, tint, emphasis, size, x, y, w, h, placement, size_source, created_by, updated_by, created_at, updated_at";
     private const string ConnectionColumns = "id, source_id, target_id, kind, label, created_by, created_at";
+    private const string SketchColumns = "id, region_id, path, tint, stroke, x, y, w, h, created_by, created_at";
 
     public static async Task<CanvasRow?> Canvas(SqliteConnection connection, SqliteTransaction? transaction, string id, CancellationToken cancellationToken)
     {
@@ -52,6 +53,16 @@ public static class Rows
                 var edge = ReadConnection(reader);
                 state.Connections[edge.Id] = edge;
             }
+        await using (var command = connection.Command(transaction, $"SELECT {SketchColumns} FROM sketches WHERE canvas_id = $id", ("$id", meta.Id)))
+        {
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var sketch = new Sketch(reader.GetString(0), reader.NullableString(1), reader.GetString(2), reader.NullableString(3), reader.GetInt32(4),
+                    reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8), reader.GetString(9), reader.Time(10));
+                state.Sketches[sketch.Id] = sketch;
+            }
+        }
         return state;
     }
 
@@ -91,6 +102,7 @@ public static class Rows
                         EntityKind.Region => "regions",
                         EntityKind.Card => "cards",
                         EntityKind.Connection => "connections",
+                        EntityKind.Sketch => "sketches",
                         _ => throw new InvalidOperationException("Canvas metadata is never deleted by an op.")
                     };
                     await connection.Exec(transaction, $"DELETE FROM {table} WHERE id = $id AND canvas_id = $canvas", cancellationToken, ("$id", op.EntityId), ("$canvas", canvasId));
@@ -128,6 +140,14 @@ public static class Rows
                         "created_by = excluded.created_by, created_at = excluded.created_at",
                         cancellationToken, ("$canvas", canvasId), ("$id", e.Id), ("$source", e.SourceId), ("$target", e.TargetId), ("$kind", e.Kind), ("$label", e.Label),
                         ("$by", e.CreatedBy), ("$created", Sql.Iso(e.CreatedAt)));
+                    break;
+                case Sketch k:
+                    await connection.Exec(transaction,
+                        $"INSERT INTO sketches (canvas_id, {SketchColumns}) VALUES ($canvas, $id, $region, $path, $tint, $stroke, $x, $y, $w, $h, $by, $created) " +
+                        "ON CONFLICT(id) DO UPDATE SET region_id = excluded.region_id, path = excluded.path, tint = excluded.tint, stroke = excluded.stroke, " +
+                        "x = excluded.x, y = excluded.y, w = excluded.w, h = excluded.h, created_by = excluded.created_by, created_at = excluded.created_at",
+                        cancellationToken, ("$canvas", canvasId), ("$id", k.Id), ("$region", k.RegionId), ("$path", k.Path), ("$tint", k.Tint), ("$stroke", k.Stroke),
+                        ("$x", k.X), ("$y", k.Y), ("$w", k.W), ("$h", k.H), ("$by", k.CreatedBy), ("$created", Sql.Iso(k.CreatedAt)));
                     break;
             }
         }

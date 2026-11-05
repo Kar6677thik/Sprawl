@@ -198,3 +198,6 @@ input::placeholder { color: var(--text-faint); }
 .collection + .collection { margin-top: 24px; }
 .collection-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
 .collection-title span { font-weight: 500; margin-left: 4px; }
+.sketch { display: block; overflow: visible; color: var(--text); opacity: 0.85; }
+.sketch[data-tint] { color: var(--tint); }
+.sketch.is-selected { filter: drop-shadow(0 0 2px var(--accent)); }

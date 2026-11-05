@@ -116,4 +116,7 @@ public static class Limits
     public const int ConnectionsPerCanvas = 6000;
     public const int Ref = 64;
     public const int CardsPerQuery = 50;
+    public const int SketchPath = 20000;
+    public const int SketchesPerCanvas = 1000;
+    public const int SketchSize = 20000;
 }

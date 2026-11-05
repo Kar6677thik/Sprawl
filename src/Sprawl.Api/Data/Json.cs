@@ -25,6 +25,7 @@ public static class SprawlJson
         EntityKind.Region => JsonSerializer.Deserialize<Region>(json, Options),
         EntityKind.Card => JsonSerializer.Deserialize<Card>(json, Options),
         EntityKind.Connection => JsonSerializer.Deserialize<Connection>(json, Options),
+        EntityKind.Sketch => JsonSerializer.Deserialize<Sketch>(json, Options),
         _ => throw new InvalidDataException($"Unknown entity id '{entityId}' in the op log.")
     };
 

@@ -1,6 +1,6 @@
 # Sprawl feature plan: the best of comparable tools
 
-Written 5 November 2026. **Status: P1–P5 built, except ink (P5), deferred on purpose.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+Written 5 November 2026. **Status: P1–P5 built.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
 
 ## 1. What the others do best
 
@@ -60,8 +60,12 @@ Left out on purpose: real-time multi-user collaboration (single owner), an in-ap
 - **Collections:** the home page groups canvases under their collection. In the palette, `collection: Name` (or `move to Name`) files the current canvas; `collection` alone offers to take it out.
 - **Not built:** a canvas-level graph of cross links. The backlinks lists cover the use; revisit if canvases multiply.
 
-### P5: Freeform and time (built, except ink)
+### P5: Freeform and time (built)
 
 - **History replay** (`Shift+H`): a slider over every version, Space to play, arrows to step, Restore to revert to the version shown (a new version; nothing is lost). Past states come from `GET /state?version=`, are cached in the session, and are read-only: edits, drags and the palette are off while replaying.
 - **Saved searches:** any palette search (for example `#risk question`) can be saved; saved ones appear under Ctrl+K and rerun with one keystroke. They are kept per canvas in the browser's local storage, because they are a view preference, not canvas content.
-- **Not built: ink and shapes.** They would need a new entity type through the op log, undo and placement, and Claude could not read them; they add little to a canvas that Claude mostly writes. Revisit if hand sketching becomes a real need.
+- **Ink** (`D`): freehand strokes, owner only. A stroke is a `Sketch` entity (`sk_…`): SVG path data in its own box, relative to the region under its centre so it moves with the region, or loose on the canvas. It goes through the op log like everything else, so undo, revert, history replay, SSE and snapshots cover it; a region's sketches go with it when the region is deleted or merged away.
+  - In draw mode: 1-6 pick a colour (the card tints), `[` and `]` the line width, the wheel still zooms, Ctrl+Z undoes a stroke, Esc or D leaves. Select a sketch to drag or delete it.
+  - Paths are limited to M, L, Q, C and Z commands and numbers (`Text.SketchPath`), so stored ink cannot script or link. At most 1,000 sketches per canvas, 20,000 characters per path.
+  - Claude cannot draw (`addSketch` and `deleteSketches` are refused to the device token) and sees only a count per region in the outline ("2 sketches by the owner"). Exports leave sketches out.
+  - Strokes are smoothed into quadratic curves through midpoints, after dropping points closer than 2 canvas pixels (`canvas/ink.ts`).

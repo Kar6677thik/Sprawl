@@ -22,6 +22,7 @@ Written 4 November 2026. **Status: M1–M3 built; M4 done on the Orbit side; M5 
 | **Canvas** | One topic. Title, short description, tags, an optional collection (a single folder name, no nesting in v1), pinned and archived flags, and a version |
 | **Region** | A named rectangle that clusters related cards. It can be nested **one level** (a sub-region), and it grows as cards are added. It has an optional tint |
 | **Card** | One thought. Kinds: `idea`, `note`, `question` (open, unanswered: the canvas's frontier), `link` (URL + summary), `code` (snippet + language), and `image` later. Fields: title, markdown body, region, tint, emphasis (`normal`/`key`), `createdBy: human \| ai`, timestamps |
+| **Sketch** | A freehand stroke drawn by the owner ([03-features.md](03-features.md), P5). Versioned like cards; Claude sees only a count |
 | **Connection** | An edge between two cards, a card and a region, or two regions. Optional label. Kind is `relates`, `leads-to`, `contradicts`, `example-of` or `depends-on` |
 | **History** | Version-ordered batches of operations. Browse them, scrub through them, undo one, or revert to any version |
 
@@ -167,6 +168,7 @@ Everything is under `/api/v1`. Errors are RFC 9457 `application/problem+json` wi
 | `deleteCards` | `ids` |
 | `setLayout` | UI only: `[{id, x, y, w?, h?, region?}]`, which marks items manual unless `asAuto` (Tidy) |
 | `unpin` | UI only: hand items back to automatic placement |
+| `addSketch` / `deleteSketches` | UI only: `path`, `x`, `y`, `w`, `h`, `region?`, `tint?`, `stroke?` / `ids` |
 
 **Actors.** The owner cookie maps to `actor=owner` and `createdBy=human`. The device token maps to `actor=mcp` and `createdBy=ai`. The MCP may add `X-Sprawl-Client: <client_id>` for the history view; the API accepts it only from the device-token principal and treats it as a label, never as authentication. `setLayout`, `unpin` and `at` are refused for the device principal, so the AI can't place anything by coordinates.
 
@@ -661,7 +663,7 @@ The images ran hardened in Production mode, including a real password + TOTP sig
 - the Restricted namespace and Orbit's catalog onboarding kit, admission policy and render
 - the network policies
 - a backup to restic, then a restore |
-| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests. **P4 (across canvases) built 5 Nov:** `[[Canvas/Card]]` links with backlinks on both sides, collections on the home page. 27 API and 39 web tests. **P5 built 5 Nov (without ink):** history replay (Shift+H) and saved searches. PNG export of the view added |
+| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). **P3 (capture and review) built 5 Nov:** Inbox capture (Shift+I), spaced question review (R) with a `reviews` table, `get_due_questions`, prompts `triage_inbox` and `answer_questions` (18 tools, 7 prompts). 48 domain, 26 API, 22 MCP and 38 web tests. **P4 (across canvases) built 5 Nov:** `[[Canvas/Card]]` links with backlinks on both sides, collections on the home page. 27 API and 39 web tests. **P5 built 5 Nov (without ink):** history replay (Shift+H) and saved searches. PNG export of the view and ink (D, a `Sketch` entity, migration 0003) added. 56 domain, 28 API and 42 web tests |
 
 ### What M5 changed from this design
 

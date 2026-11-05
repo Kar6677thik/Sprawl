@@ -1,5 +1,5 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import type { Card, CanvasDocument, Connection, Region } from "../api/types";
+import type { Card, CanvasDocument, Connection, Region, Sketch } from "../api/types";
 import { orderRegions } from "./document";
 import type { ZoomLevel } from "./zoom";
 
@@ -9,7 +9,8 @@ export type RegionNodeData = { region: Region; cardCount: number; minis: MiniBox
 export type CardNodeData = { card: Card; fresh: boolean };
 export type RegionNode = Node<RegionNodeData, "region">;
 export type CardNode = Node<CardNodeData, "card">;
-export type SprawlNode = RegionNode | CardNode;
+export type SketchNode = Node<{ sketch: Sketch }, "sketch">;
+export type SprawlNode = RegionNode | CardNode | SketchNode;
 
 const DIRECTIONAL = new Set(["leads-to", "depends-on", "example-of"]);
 
@@ -47,7 +48,19 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
     zIndex: 3,
     hidden: far && card.regionId !== null,
   }));
-  return [...regions, ...cards];
+  // Sketches sit above regions and below cards (layer 2, with edges), so they never hide card text.
+  const sketches: SketchNode[] = (doc.sketches ?? []).map((sketch) => ({
+    id: sketch.id,
+    type: "sketch",
+    position: { x: sketch.x, y: sketch.y },
+    width: sketch.w,
+    height: sketch.h,
+    ...(sketch.regionId ? { parentId: sketch.regionId } : {}),
+    data: { sketch },
+    zIndex: 2,
+    hidden: far && sketch.regionId !== null,
+  }));
+  return [...regions, ...sketches, ...cards];
 }
 
 function miniatures(doc: CanvasDocument): Map<string, MiniBox[]> {

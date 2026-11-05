@@ -67,6 +67,23 @@ public sealed record Card(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt) : IEntity;
 
+/// <summary>
+/// A freehand stroke drawn by the owner: an SVG path (M/L/Q/C/Z commands) in its own box, which is relative to its region
+/// (and moves with it) or canvas-absolute when loose. Sketches carry no meaning Claude can read; the outline only counts them.
+/// </summary>
+public sealed record Sketch(
+    string Id,
+    string? RegionId,
+    string Path,
+    string? Tint,
+    int Stroke,
+    int X,
+    int Y,
+    int W,
+    int H,
+    string CreatedBy,
+    DateTimeOffset CreatedAt) : IEntity;
+
 /// <summary>An edge between two cards, a card and a region, or two regions. The endpoint type is in the ID prefix.</summary>
 public sealed record Connection(
     string Id,

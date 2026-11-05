@@ -61,7 +61,8 @@ public sealed record CanvasDocument(
     IReadOnlyList<Region> Regions,
     IReadOnlyList<Card> Cards,
     IReadOnlyList<Connection> Connections,
-    IReadOnlyList<LayoutWarning> LayoutWarnings);
+    IReadOnlyList<LayoutWarning> LayoutWarnings,
+    IReadOnlyList<Sketch>? Sketches = null);
 
 public sealed record HistoryEntry(
     long Version,

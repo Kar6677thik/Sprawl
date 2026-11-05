@@ -20,6 +20,7 @@ public sealed record Op(string Type, string EntityId, IEntity? Before, IEntity? 
             EntityKind.Region => "region",
             EntityKind.Card => "card",
             EntityKind.Connection => "connection",
+            EntityKind.Sketch => "sketch",
             _ => throw new ArgumentException($"Unknown entity id '{id}'.")
         };
         if (before is null) return noun + ".create";
@@ -46,6 +47,7 @@ public static class StateOps
             case EntityKind.Region: if (value is Region region) state.Regions[id] = region; else state.Regions.Remove(id); break;
             case EntityKind.Card: if (value is Card card) state.Cards[id] = card; else state.Cards.Remove(id); break;
             case EntityKind.Connection: if (value is Connection connection) state.Connections[id] = connection; else state.Connections.Remove(id); break;
+            case EntityKind.Sketch: if (value is Sketch sketch) state.Sketches[id] = sketch; else state.Sketches.Remove(id); break;
             default: throw new ArgumentException($"Unknown entity id '{id}'.");
         }
     }
@@ -58,6 +60,7 @@ public static class StateOps
         DiffSet(from.Regions, to.Regions, ops);
         DiffSet(from.Cards, to.Cards, ops);
         DiffSet(from.Connections, to.Connections, ops);
+        DiffSet(from.Sketches, to.Sketches, ops);
         return ops;
     }
 
@@ -82,6 +85,8 @@ public static class StateOps
                 problems.Add(region.Id);
         foreach (var connection in state.Connections.Values)
             if (state.Find(connection.SourceId) is null || state.Find(connection.TargetId) is null) problems.Add(connection.Id);
+        foreach (var sketch in state.Sketches.Values)
+            if (sketch.RegionId is not null && !state.Regions.ContainsKey(sketch.RegionId)) problems.Add(sketch.Id);
         return problems;
     }
 }

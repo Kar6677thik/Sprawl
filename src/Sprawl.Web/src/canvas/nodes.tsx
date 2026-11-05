@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { CardNode, RegionNode } from "./flow";
+import type { CardNode, RegionNode, SketchNode } from "./flow";
 import type { ZoomLevel } from "./zoom";
 import { Body, KindGlyph } from "./parts";
 
@@ -86,4 +86,15 @@ function safeHost(url: string) {
   try { return new URL(url).host; } catch { return url; }
 }
 
-export const nodeTypes = { region: RegionView, card: CardView };
+/** A freehand stroke. Drawn in its own box; the box is what selection and dragging act on. */
+export const SketchView = memo(function SketchView({ data, selected }: NodeProps<SketchNode>) {
+  const { sketch } = data;
+  return (
+    <svg className={`sketch${selected ? " is-selected" : ""}`} data-tint={sketch.tint ?? undefined} width={sketch.w} height={sketch.h}
+      viewBox={`0 0 ${sketch.w} ${sketch.h}`} aria-label="Sketch" role="img">
+      <path d={sketch.path} fill="none" stroke="currentColor" strokeWidth={sketch.stroke} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+});
+
+export const nodeTypes = { region: RegionView, card: CardView, sketch: SketchView };

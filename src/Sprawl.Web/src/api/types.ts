@@ -79,6 +79,22 @@ export interface CanvasDocument {
   cards: Card[];
   connections: Connection[];
   layoutWarnings: LayoutWarning[];
+  sketches?: Sketch[] | null;
+}
+
+/** A freehand stroke drawn by the owner; the path is relative to its box, the box to its region. */
+export interface Sketch {
+  id: string;
+  regionId: string | null;
+  path: string;
+  tint: string | null;
+  stroke: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  createdBy: Author;
+  createdAt: string;
 }
 
 export interface CanvasSummary {
@@ -156,7 +172,9 @@ export type Intent =
   | { type: "updateRegion"; id: string; title?: string; tint?: string }
   | { type: "updateCanvas"; title?: string; description?: string; tags?: string[]; collection?: string; clearCollection?: boolean; pinned?: boolean; archived?: boolean }
   | { type: "setLayout"; items: LayoutItem[] }
-  | { type: "unpin"; ids: string[] };
+  | { type: "unpin"; ids: string[] }
+  | { type: "addSketch"; path: string; x: number; y: number; w: number; h: number; region?: string; tint?: string; stroke?: number }
+  | { type: "deleteSketches"; ids: string[] };
 
 export interface BatchRequest {
   intents: Intent[];
@@ -199,7 +217,7 @@ export interface Session {
   devSignIn: boolean;
 }
 
-export type EntityKind = "canvas" | "region" | "card" | "connection" | "unknown";
+export type EntityKind = "canvas" | "region" | "card" | "connection" | "sketch" | "unknown";
 
 export function kindOf(id: string): EntityKind {
   switch (id.slice(0, 3)) {
@@ -207,6 +225,7 @@ export function kindOf(id: string): EntityKind {
     case "rg_": return "region";
     case "cd_": return "card";
     case "cx_": return "connection";
+    case "sk_": return "sketch";
     default: return "unknown";
   }
 }

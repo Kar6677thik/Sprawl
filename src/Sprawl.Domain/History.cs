@@ -59,6 +59,9 @@ public static class Summaries
         Add(parts, Count("card.delete"), "-", "card");
         Add(parts, Count("region.delete"), "-", "region");
         Add(parts, Count("connection.delete"), "-", "connection");
+        Add(parts, Count("sketch.create"), "+", "sketch");
+        Add(parts, Count("sketch.update"), "moved ", "sketch");
+        Add(parts, Count("sketch.delete"), "-", "sketch");
         if (kind == BatchKinds.Tidy) return $"Tidied {Plural(ops.Count, "item")}";
         if (parts.Count == 0) parts.Add($"layout ({Plural(ops.Count, "item")})");
         return string.Join(", ", parts);

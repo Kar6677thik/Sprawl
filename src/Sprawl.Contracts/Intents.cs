@@ -23,6 +23,8 @@ namespace Sprawl.Contracts;
 [JsonDerivedType(typeof(UpdateCanvasIntent), "updateCanvas")]
 [JsonDerivedType(typeof(SetLayoutIntent), "setLayout")]
 [JsonDerivedType(typeof(UnpinIntent), "unpin")]
+[JsonDerivedType(typeof(AddSketchIntent), "addSketch")]
+[JsonDerivedType(typeof(DeleteSketchesIntent), "deleteSketches")]
 public abstract record Intent;
 
 /// <param name="Near">A region (ID or title) to place the new region next to.</param>
@@ -94,5 +96,12 @@ public sealed record LayoutItem(string Id, double X, double Y, double? W = null,
 
 /// <summary>Owner only. Hand items back to automatic placement.</summary>
 public sealed record UnpinIntent(IReadOnlyList<string> Ids) : Intent;
+
+/// <summary>Owner only: a freehand stroke. X/Y place its box: relative to <paramref name="Region"/>, or canvas-absolute when none.</summary>
+/// <param name="Path">SVG path data in the box's own coordinates (0..W, 0..H).</param>
+public sealed record AddSketchIntent(string Path, double X, double Y, int W, int H, string? Region = null, string? Tint = null, int? Stroke = null, string? Ref = null) : Intent;
+
+/// <summary>Owner only.</summary>
+public sealed record DeleteSketchesIntent(IReadOnlyList<string> Ids) : Intent;
 
 public sealed record Point(double X, double Y);

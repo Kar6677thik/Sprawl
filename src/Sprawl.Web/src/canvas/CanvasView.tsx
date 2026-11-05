@@ -14,6 +14,8 @@ import { HistoryPanel } from "./HistoryPanel";
 import { InsightsPanel } from "./InsightsPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { Replay } from "./Replay";
+import { DrawLayer, INK_TINTS, type InkTint } from "./DrawLayer";
+import type { Stroke } from "./ink";
 import { LinkContext, type LinkActions } from "./parts";
 import { LinkIndex, mayBeExternal } from "./semantics";
 import { warmTidy } from "./tidy";
@@ -68,6 +70,7 @@ function Flow({ canvas, initialFocus }: Props) {
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
   const [presenting, setPresenting] = useState<number | null>(null);
+  const [ink, setInk] = useState<{ tint: InkTint; width: number } | null>(null);
   const dragging = useRef(false);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const focusedInitial = useRef(false);
@@ -156,7 +159,7 @@ function Flow({ canvas, initialFocus }: Props) {
   }, [canvas, doc, flow]);
 
   const onNodeClick = useCallback((_event: unknown, node: Node) => {
-    if (!connectFrom || replaying) return;
+    if (!connectFrom || replaying || node.id.startsWith("sk_")) return;
     if (node.id !== connectFrom) void canvas.write([{ type: "connect", from: connectFrom, to: node.id }], [connectFrom, node.id]);
     setConnectFrom(null);
   }, [canvas, connectFrom, replaying]);
@@ -218,20 +221,32 @@ function Flow({ canvas, initialFocus }: Props) {
     const edgeIds = allEdges.filter((id) => !id.startsWith(LINK_EDGE_PREFIX));
     const cards = ids.filter((id) => id.startsWith("cd_"));
     const regions = ids.filter((id) => id.startsWith("rg_"));
-    if (cards.length === 0 && edgeIds.length === 0 && regions.length === 0) return;
+    const sketches = ids.filter((id) => id.startsWith("sk_"));
+    if (cards.length === 0 && edgeIds.length === 0 && regions.length === 0 && sketches.length === 0) return;
     // Regions are deleted only when empty (or emptied by this same delete); otherwise the server refuses.
     const emptyRegions = regions.filter((id) => doc.cards.every((c) => c.regionId !== id || cards.includes(c.id)) && !doc.regions.some((r) => r.parentId === id));
     if (regions.length > emptyRegions.length) canvas.say("Regions with cards are kept; move or delete their cards first.");
-    if (cards.length === 0 && edgeIds.length === 0 && emptyRegions.length === 0) return;
+    if (cards.length === 0 && edgeIds.length === 0 && emptyRegions.length === 0 && sketches.length === 0) return;
     void canvas.write([
       ...(cards.length > 0 ? [{ type: "deleteCards" as const, ids: cards }] : []),
+      ...(sketches.length > 0 ? [{ type: "deleteSketches" as const, ids: sketches }] : []),
       ...edgeIds.filter((id) => !id.startsWith(LINK_EDGE_PREFIX)).map((id) => ({ type: "disconnect" as const, id })),
       ...emptyRegions.map((id) => ({ type: "deleteRegion" as const, id })),
-    ], [...cards, ...edgeIds, ...emptyRegions]).then((result) => {
+    ], [...cards, ...edgeIds, ...emptyRegions, ...sketches]).then((result) => {
       if (result?.changed) canvas.say(result.summary, { action: { label: "Undo", run: () => void canvas.undoVersion(result.version) } });
     });
     if (panel?.kind === "card" && cards.includes(panel.id)) setPanel(null);
   }, [canvas, doc.cards, doc.regions, panel, selection]);
+
+  /** A finished stroke joins the region under its centre (so it moves with it), or stays loose on the canvas. */
+  const addStroke = useCallback((stroke: Stroke) => {
+    const region = regionAt(doc, { x: stroke.x + stroke.w / 2, y: stroke.y + stroke.h / 2 });
+    const at = relativeTo(doc, region, { x: stroke.x, y: stroke.y });
+    void canvas.write([{
+      type: "addSketch", path: stroke.path, x: at.x, y: at.y, w: stroke.w, h: stroke.h, stroke: ink?.width ?? 2,
+      ...(region ? { region } : {}), ...(ink?.tint ? { tint: ink.tint } : {}),
+    }], []);
+  }, [canvas, doc, ink]);
 
   /** Present: top-level regions in reading order, one per step, framed to fill the screen. */
   const steps = useMemo(() => doc.regions.filter((r) => r.parentId === null).sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id)), [doc.regions]);
@@ -326,6 +341,7 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "capture", group: "Actions", label: "Capture to Inbox", hint: "quick thoughts, sort later", keys: "⇧I", run: () => setComposing(CAPTURE) },
     { id: "review", group: "Actions", label: "Review open questions", keys: "R", run: () => setPanel({ kind: "review" }) },
     { id: "replay", group: "Actions", label: "Replay history", hint: "watch the canvas grow", keys: "⇧H", run: () => { setPanel(null); setReplaying(true); } },
+    { id: "draw", group: "Actions", label: "Draw", hint: "freehand sketch", keys: "D", run: () => setInk({ tint: null, width: 2 }) },
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -344,6 +360,16 @@ function Flow({ canvas, initialFocus }: Props) {
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key;
       if (replaying) return; // Replay owns the keyboard; nothing may edit a past state.
+      if (ink && !mod) {
+        // Draw mode: Esc or D leaves, 1-6 pick a colour, [ and ] change the line; Ctrl+Z still undoes a stroke.
+        const typingHere = event.target instanceof Element && event.target.closest("input, textarea, select") !== null;
+        if (typingHere) return;
+        if (key === "Escape" || key === "d") { event.preventDefault(); setInk(null); return; }
+        const swatch = Number(key);
+        if (swatch >= 1 && swatch <= INK_TINTS.length) { event.preventDefault(); setInk({ ...ink, tint: INK_TINTS[swatch - 1]! }); return; }
+        if (key === "[" || key === "]") { event.preventDefault(); setInk({ ...ink, width: Math.max(1, Math.min(12, ink.width + (key === "]" ? 1 : -1))) }); return; }
+        if (key !== "z") return;
+      }
       if (presenting !== null && !mod) {
         const moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
         if (key === "Escape") { event.preventDefault(); present(null); return; }
@@ -367,6 +393,7 @@ function Flow({ canvas, initialFocus }: Props) {
         case "/": event.preventDefault(); openPalette("canvas"); return;
         case "#": event.preventDefault(); openPalette("canvas", "#"); return;
         case "p": present(0); return;
+        case "d": setInk({ tint: null, width: 2 }); return;
         case "I": event.preventDefault(); setComposing(CAPTURE); return;
         case "r": setPanel((p) => (p?.kind === "review" ? null : { kind: "review" })); return;
         case "i": setPanel((p) => (p?.kind === "insights" ? null : { kind: "insights" })); return;
@@ -386,14 +413,14 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, selection, shortcuts, startCard, steps.length, tidySelection]);
+  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selection, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
   return (
     <ZoomLevelContext.Provider value={level}>
       <LinkContext.Provider value={linkActions}>
-      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -421,6 +448,18 @@ function Flow({ canvas, initialFocus }: Props) {
           <Background gap={24} size={1} />
           <ZoomTracker onLevel={setLevel} />
         </ReactFlow>
+        {ink && !replaying && <DrawLayer tint={ink.tint} width={ink.width} onStroke={addStroke} />}
+        {ink && !replaying && (
+          <div className="mode-banner ink-bar" role="toolbar" aria-label="Drawing">
+            <span>Draw</span>
+            {INK_TINTS.map((tint, i) => (
+              <button key={tint ?? "ink"} type="button" className={`swatch${ink.tint === tint ? " is-on" : ""}`} data-tint={tint ?? undefined}
+                aria-label={`${tint ?? "ink"} (${i + 1})`} title={`${tint ?? "ink"} · ${i + 1}`} onClick={() => setInk({ ...ink, tint })} />
+            ))}
+            <span className="ink-width" title="Line width: [ and ]">{ink.width}px</span>
+            <button type="button" className="quiet small" onClick={() => setInk(null)}>Done <kbd>Esc</kbd></button>
+          </div>
+        )}
         {replaying && canvas.doc && (
           <Replay canvasId={canvas.doc.meta.id} latest={canvas.doc.version} onState={setPastDoc}
             onRestore={(v) => { setReplaying(false); void canvas.revertTo(v); }} onExit={() => setReplaying(false)} />

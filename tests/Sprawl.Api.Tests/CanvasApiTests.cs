@@ -145,6 +145,32 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Sketches_persist_undo_replay_and_are_refused_to_the_device()
+    {
+        var owner = await factory.Owner();
+        var created = await NewCanvas(owner, "Sketchbook", Card("Ideas", "One", "o"));
+        var id = created.CanvasId;
+        var drawn = await (await owner.PostAsJsonAsync($"/api/v1/canvases/{id}/batches",
+            new BatchRequest([new AddSketchIntent("M0 0 L20 20", 30, 60, 20, 20, "Ideas", Ref: "s")]), Api.Json)).Read<BatchResult>();
+        var sketchId = drawn.Refs["s"];
+
+        var document = await (await owner.GetAsync($"/api/v1/canvases/{id}")).Read<CanvasDocument>();
+        var sketch = Assert.Single(document.Sketches!);
+        Assert.Equal((sketchId, "M0 0 L20 20", 30), (sketch.Id, sketch.Path, sketch.X));
+        Assert.Contains("1 sketch by the owner", await (await owner.GetAsync($"/api/v1/canvases/{id}/outline")).Content.ReadAsStringAsync());
+
+        // Past states (history replay) include sketches; undo removes it.
+        Assert.Empty((await (await owner.GetAsync($"/api/v1/canvases/{id}/state?version=1")).Read<CanvasDocument>()).Sketches!);
+        Assert.Single((await (await owner.GetAsync($"/api/v1/canvases/{id}/state?version=2")).Read<CanvasDocument>()).Sketches!);
+        await owner.PostAsync($"/api/v1/canvases/{id}/batches/{drawn.Version}/undo", null);
+        Assert.Empty((await (await owner.GetAsync($"/api/v1/canvases/{id}")).Read<CanvasDocument>()).Sketches!);
+
+        var device = factory.Device();
+        var refused = await device.PostAsJsonAsync($"/api/v1/canvases/{id}/batches", new BatchRequest([new AddSketchIntent("M0 0 L1 1", 0, 0, 1, 1)]), Api.Json);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

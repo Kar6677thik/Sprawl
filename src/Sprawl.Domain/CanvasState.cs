@@ -9,6 +9,7 @@ public sealed class CanvasState
     public Dictionary<string, Region> Regions { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, Card> Cards { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, Connection> Connections { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, Sketch> Sketches { get; } = new(StringComparer.Ordinal);
 
     public CanvasState Clone()
     {
@@ -16,6 +17,7 @@ public sealed class CanvasState
         foreach (var (id, region) in Regions) copy.Regions[id] = region;
         foreach (var (id, card) in Cards) copy.Cards[id] = card;
         foreach (var (id, connection) in Connections) copy.Connections[id] = connection;
+        foreach (var (id, sketch) in Sketches) copy.Sketches[id] = sketch;
         return copy;
     }
 
@@ -23,7 +25,8 @@ public sealed class CanvasState
         Meta,
         [.. Regions.Values.OrderBy(region => region.Id, StringComparer.Ordinal)],
         [.. Cards.Values.OrderBy(card => card.Id, StringComparer.Ordinal)],
-        [.. Connections.Values.OrderBy(connection => connection.Id, StringComparer.Ordinal)]);
+        [.. Connections.Values.OrderBy(connection => connection.Id, StringComparer.Ordinal)],
+        [.. Sketches.Values.OrderBy(sketch => sketch.Id, StringComparer.Ordinal)]);
 
     public static CanvasState FromSnapshot(CanvasSnapshot snapshot)
     {
@@ -31,6 +34,7 @@ public sealed class CanvasState
         foreach (var region in snapshot.Regions) state.Regions[region.Id] = region;
         foreach (var card in snapshot.Cards) state.Cards[card.Id] = card;
         foreach (var connection in snapshot.Connections) state.Connections[connection.Id] = connection;
+        foreach (var sketch in snapshot.Sketches ?? []) state.Sketches[sketch.Id] = sketch;
         return state;
     }
 
@@ -40,6 +44,7 @@ public sealed class CanvasState
         EntityKind.Region => Regions.GetValueOrDefault(id),
         EntityKind.Card => Cards.GetValueOrDefault(id),
         EntityKind.Connection => Connections.GetValueOrDefault(id),
+        EntityKind.Sketch => Sketches.GetValueOrDefault(id),
         _ => null
     };
 
@@ -47,9 +52,10 @@ public sealed class CanvasState
     public IEnumerable<Region> RegionsIn(string? parentId) => Regions.Values.Where(region => region.ParentId == parentId);
 }
 
-public sealed record CanvasSnapshot(CanvasMeta? Meta, IReadOnlyList<Region> Regions, IReadOnlyList<Card> Cards, IReadOnlyList<Connection> Connections);
+/// <param name="Sketches">Absent in snapshots written before sketches existed.</param>
+public sealed record CanvasSnapshot(CanvasMeta? Meta, IReadOnlyList<Region> Regions, IReadOnlyList<Card> Cards, IReadOnlyList<Connection> Connections, IReadOnlyList<Sketch>? Sketches = null);
 
-public enum EntityKind { Unknown, Canvas, Region, Card, Connection }
+public enum EntityKind { Unknown, Canvas, Region, Card, Connection, Sketch }
 
 public static class EntityIds
 {
@@ -57,6 +63,7 @@ public static class EntityIds
     public const string RegionPrefix = "rg_";
     public const string CardPrefix = "cd_";
     public const string ConnectionPrefix = "cx_";
+    public const string SketchPrefix = "sk_";
     private const string Alphabet = "0123456789abcdefghjkmnpqrstvwxyz"; // Crockford base32, lowercase
 
     public static EntityKind KindOf(string id) => id.Length < 4 ? EntityKind.Unknown : id[..3] switch
@@ -65,6 +72,7 @@ public static class EntityIds
         RegionPrefix => EntityKind.Region,
         CardPrefix => EntityKind.Card,
         ConnectionPrefix => EntityKind.Connection,
+        SketchPrefix => EntityKind.Sketch,
         _ => EntityKind.Unknown
     };
 
@@ -74,6 +82,7 @@ public static class EntityIds
         EntityKind.Region => RegionPrefix,
         EntityKind.Card => CardPrefix,
         EntityKind.Connection => ConnectionPrefix,
+        EntityKind.Sketch => SketchPrefix,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
