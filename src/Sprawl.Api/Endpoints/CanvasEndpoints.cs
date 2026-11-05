@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using Sprawl.Api.Auth;
 using Sprawl.Api.Data;
 using Sprawl.Api.Events;
@@ -40,6 +42,42 @@ public static class CanvasEndpoints
             context.Response.Headers.ETag = Http.ETag(version);
             return Results.Text(outline, "text/plain; charset=utf-8");
         });
+
+        api.MapGet("/canvases/{id}/insights", async (string id, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            return Http.WithVersion(context, row.Version, new Insights(state).Analyze(id, row.Version));
+        });
+
+        api.MapGet("/canvases/{id}/cards/{cardId}/context", async (string id, string cardId, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            var card = state.Cards.GetValueOrDefault(cardId) ?? throw SprawlException.NotFound($"Card {cardId} is not on canvas {id}.");
+            return Http.WithVersion(context, row.Version, new Insights(state).Context(id, row.Version, card));
+        });
+
+        api.MapGet("/canvases/{id}/export", async (string id, string? format, CanvasStore store, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            var name = FileName(row.Meta.Title);
+            return format switch
+            {
+                null or "markdown" or "md" => Results.File(Encoding.UTF8.GetBytes(Exchange.Markdown(state)), "text/markdown; charset=utf-8", name + ".md"),
+                "json-canvas" or "canvas" => Results.File(JsonSerializer.SerializeToUtf8Bytes(Exchange.ToJsonCanvas(state), SprawlJson.Options), "application/json", name + ".canvas"),
+                _ => throw SprawlException.Invalid("format must be markdown or json-canvas.")
+            };
+        });
+
+        // Owner only: an import is one create batch that can hold a whole canvas, so it is larger than any batch Claude may send.
+        api.MapPost("/canvases/import", async (ImportCanvasRequest request, CanvasWriter writer, HttpContext context, CancellationToken ct) =>
+        {
+            var warnings = new List<string>();
+            var intents = Exchange.FromJsonCanvas(request.Canvas, warnings);
+            var result = await writer.Create(new CreateCanvasRequest(request.Title, request.Description, Intents: intents, RequestId: request.RequestId, OnDuplicate: DuplicatePolicies.Add),
+                ActorOf(context), ct, Exchange.MaxImportIntents);
+            context.Response.Headers.ETag = Http.ETag(result.Version);
+            return TypedResults.Created($"/api/v1/canvases/{result.CanvasId}", result with { Warnings = [.. warnings, .. result.Warnings] });
+        }).RequireAuthorization(SprawlClaims.OwnerPolicy).WithMetadata(new RequestSizeLimitAttribute(ImportBodyLimit));
 
         api.MapPatch("/canvases/{id}", async (string id, UpdateCanvasIntent update, CanvasWriter writer, HttpContext context, CancellationToken ct) =>
             Result(context, await writer.Batch(id, new BatchRequest([update]), Http.IfMatch(context.Request), ActorOf(context), ct)));
@@ -83,6 +121,17 @@ public static class CanvasEndpoints
             var path = await backup.RunOnce(ct);
             return Results.Ok(new { file = Path.GetFileName(path) });
         }).RequireAuthorization(SprawlClaims.OwnerPolicy);
+    }
+
+    public const long ImportBodyLimit = 8 * 1024 * 1024;
+
+    /// <summary>A download name from a canvas title: letters, digits and dashes only, never empty.</summary>
+    public static string FileName(string title)
+    {
+        var slug = new string([.. title.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-')]);
+        while (slug.Contains("--", StringComparison.Ordinal)) slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        slug = slug.Trim('-');
+        return slug.Length == 0 ? "canvas" : slug[..Math.Min(slug.Length, 60)].TrimEnd('-');
     }
 
     private static IResult Result(HttpContext context, BatchResult result)

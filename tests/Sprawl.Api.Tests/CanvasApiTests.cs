@@ -39,6 +39,60 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Insights_and_card_context_are_derived_from_text_and_connections()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Consensus insights",
+            Card("Election", "Election timeouts", "t", body: "Randomized election timeouts avoid split votes. #liveness"),
+            Card("Availability", "Pre-vote", "p", body: "Pre-vote stops partitioned nodes disrupting election timeouts. See [[Quorum math]]. #liveness"),
+            Card("Availability", "Check-quorum", "q", body: "Leaders step down without [[Pre-vote]] style contact."));
+        var t = created.Refs["t"];
+
+        var insights = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/insights")).Read<CanvasInsights>();
+        Assert.Equal(3, insights.Cards);
+        Assert.Equal(1, insights.TextLinks);
+        Assert.Equal("Quorum math", Assert.Single(insights.DanglingLinks).Target);
+        Assert.Equal(new TagCount("liveness", 2), Assert.Single(insights.Tags));
+
+        var context = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/cards/{created.Refs["p"]}/context")).Read<CardContext>();
+        Assert.Equal(["liveness"], context.Tags);
+        Assert.Equal(["Quorum math"], context.UnresolvedLinks);
+        Assert.Equal(created.Refs["q"], Assert.Single(context.Backlinks).Id);
+        Assert.Contains(context.Related, r => r.Card.Id == t);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/cards/cd_zzzzzzzz/context")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Canvases_export_as_markdown_and_json_canvas_and_the_owner_imports_large_json_canvases()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Export me: Raft!", Card("Basics", "Terms", "t", body: "Logical clocks."), Card("Basics", "Votes?", "v", CardKinds.Question),
+            new ConnectIntent("t", "v", ConnectionKinds.LeadsTo));
+
+        var markdown = await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/export?format=markdown");
+        Assert.Equal("text/markdown", markdown.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("export-me-raft.md", markdown.Content.Headers.ContentDisposition?.FileNameStar ?? markdown.Content.Headers.ContentDisposition?.FileName);
+        Assert.StartsWith("# Export me: Raft!\n\n## Basics\n\n- **Terms**\n  Logical clocks.\n", await markdown.Content.ReadAsStringAsync());
+
+        var exported = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/export?format=json-canvas")).Read<JsonCanvasDocument>();
+        Assert.Equal(3, exported.Nodes!.Count);
+        Assert.Equal(HttpStatusCode.BadRequest, (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/export?format=pdf")).StatusCode);
+
+        // Import is owner-only, and can hold far more than one batch: 400 cards (over 1 MiB of JSON) in one create.
+        var nodes = Enumerable.Range(0, 400).Select(i => new JsonCanvasNode($"n{i}", "text", i % 20 * 300, i / 20 * 200, 280, 120, Text: $"Card {i}\n" + new string('x', 2600))).ToList();
+        var big = new ImportCanvasRequest("Imported", new JsonCanvasDocument([.. exported.Nodes!, .. nodes], exported.Edges));
+        Assert.Equal(HttpStatusCode.Forbidden, (await device.PostAsJsonAsync("/api/v1/canvases/import", big, Api.Json)).StatusCode);
+        var owner = await factory.Owner();
+        var response = await owner.PostAsJsonAsync("/api/v1/canvases/import", big, Api.Json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var imported = await (await owner.GetAsync($"/api/v1/canvases/{(await response.Read<BatchResult>()).CanvasId}")).Read<CanvasDocument>();
+        Assert.Equal(402, imported.Cards.Count);
+        Assert.Contains(imported.Cards, c => c.Title == "Votes?" && c.Kind == CardKinds.Question);
+        Assert.Equal(ConnectionKinds.LeadsTo, Assert.Single(imported.Connections).Kind);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

@@ -119,11 +119,11 @@ public static class OutlineRenderer
         }
     }
 
-    private static IEnumerable<Region> ReadingOrder(IEnumerable<Region> regions) =>
+    internal static IEnumerable<Region> ReadingOrder(IEnumerable<Region> regions) =>
         regions.OrderBy(region => region.Y).ThenBy(region => region.X).ThenBy(region => region.Id, StringComparer.Ordinal);
 
     /// <summary>Creation order (the order cards were added), then position for cards created together.</summary>
-    private static IEnumerable<Card> ReadingOrder(IEnumerable<Card> cards) =>
+    internal static IEnumerable<Card> ReadingOrder(IEnumerable<Card> cards) =>
         cards.OrderBy(card => card.CreatedAt).ThenBy(card => card.Y).ThenBy(card => card.X).ThenBy(card => card.Id, StringComparer.Ordinal);
 
     private static string KindLabel(string kind) => kind switch

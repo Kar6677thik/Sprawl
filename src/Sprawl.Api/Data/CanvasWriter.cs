@@ -20,7 +20,7 @@ public sealed class CanvasWriter(Database database, CanvasEventHub events, TimeP
 
     private sealed record Outcome(EngineResult Result, long? RevertsTo = null, long? Undoes = null, bool Always = false);
 
-    public async Task<BatchResult> Create(CreateCanvasRequest request, Actor actor, CancellationToken cancellationToken)
+    public async Task<BatchResult> Create(CreateCanvasRequest request, Actor actor, CancellationToken cancellationToken, int maxIntents = Limits.IntentsPerBatch)
     {
         ValidateRequestId(request.RequestId);
         await gate.WaitAsync(cancellationToken);
@@ -39,7 +39,7 @@ public sealed class CanvasWriter(Database database, CanvasEventHub events, TimeP
             string canvasId;
             do canvasId = ids.Next(EntityKind.Canvas);
             while (await Rows.Canvas(connection, transaction, canvasId, cancellationToken) is not null);
-            var result = BatchEngine.Create(canvasId, request, actor, now, ids);
+            var result = BatchEngine.Create(canvasId, request, actor, now, ids, maxIntents);
             var meta = (CanvasMeta)result.Ops.First(op => op.EntityId == canvasId).After!;
             await connection.Exec(transaction,
                 "INSERT INTO canvases (id, title, description, tags, collection, pinned, archived, version, created_at, updated_at) VALUES ($id, $t, $d, $tags, $c, 0, 0, 0, $now, $now)",

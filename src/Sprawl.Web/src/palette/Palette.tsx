@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { CanvasDocument, CanvasSummary, CardSearchHit } from "../api/types";
+import { tagsOf } from "../canvas/semantics";
 import { rank } from "./fuzzy";
 
 export interface PaletteEntry {
@@ -22,17 +23,18 @@ interface Props {
   onFocus: (id: string) => void;
   onOpenCanvas: (canvasId: string, focus?: string) => void;
   onClose: () => void;
+  initialQuery?: string;
 }
 
 const PLACEHOLDER: Record<PaletteMode, string> = {
-  all: "Type a command, region, card or canvas…",
-  canvas: "Search this canvas…",
+  all: "Type a command, region, card, canvas or #tag…",
+  canvas: "Search this canvas, or #tag…",
   global: "Search all canvases…",
 };
 
 /** Ctrl+K. Everything is reachable by name: actions, this canvas's regions and cards, other canvases, full-text search. */
-export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas, onClose }: Props) {
-  const [query, setQuery] = useState("");
+export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas, onClose, initialQuery = "" }: Props) {
+  const [query, setQuery] = useState(initialQuery);
   const [active, setActive] = useState(0);
   const [canvases, setCanvases] = useState<CanvasSummary[]>([]);
   const [hits, setHits] = useState<CardSearchHit[]>([]);
@@ -56,6 +58,16 @@ export function Palette({ mode, doc, actions, onOpenCard, onFocus, onOpenCanvas,
       id: c.id, group: "Cards", label: c.title, hint: c.kind === "question" ? "open question" : c.kind,
       run: () => onOpenCard(c.id), searchText: `${c.title} ${mode === "canvas" ? c.body : ""}`,
     }));
+    // "#tag" (or "#tag words") lists this canvas's cards with a tag starting that way, optionally narrowed by the words.
+    const tagQuery = query.trim().match(/^#([\p{L}\p{N}_-]*)\s*(.*)$/u);
+    if (tagQuery) {
+      const prefix = tagQuery[1]!.toLowerCase();
+      const tagged = (doc?.cards ?? []).filter((c) => tagsOf(c).some((t) => t.startsWith(prefix))).map((c) => ({
+        id: c.id, group: prefix ? `Tagged #${prefix}` : "Tagged", label: c.title, hint: tagsOf(c).map((t) => `#${t}`).join(" "),
+        run: () => onOpenCard(c.id), searchText: `${c.title} ${c.body}`,
+      }));
+      return tagQuery[2] ? rank(tagQuery[2], tagged, (entry) => entry.searchText, 50) : tagged.slice(0, 100);
+    }
     if (mode === "canvas") {
       if (!query.trim()) return cards.slice(0, 50);
       return rank(query, cards, (entry) => entry.searchText, 50);

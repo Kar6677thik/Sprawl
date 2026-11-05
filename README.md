@@ -2,7 +2,7 @@
 
 A minimalist infinite canvas, one per topic, that keeps growing over time. Each canvas is a living map of your thinking on one subject: regions of cards (ideas, notes, open questions, links, code) joined by labelled connections. Claude adds most of the content through an MCP server, and you edit directly in the UI. Every change goes into an operation log, so you can see how a canvas grew and revert it to any version.
 
-**Status: M1–M3 done.** The API (data model, deterministic placement, op log with undo and revert, live events), the web canvas (semantic zoom, live updates, editing, command palette, Tidy, history) and the MCP server (15 tools, 3 prompts, OAuth resource server) are built and run locally. Orbit Identity serves the Sprawl resource (M4), and the release artifacts and runbook for Megatron are ready ([docs/02-operations.md](docs/02-operations.md), M5). In the canvas, press `?` for keyboard shortcuts. Design: [docs/01-design.md](docs/01-design.md).
+**Status: M1–M5 done and live on Megatron; feature plan P1 (knowledge graph) built.** The API (data model, deterministic placement, op log with undo and revert, live events), the web canvas (semantic zoom, live updates, editing, command palette, Tidy, history, `[[links]]`, `#tags`, backlinks, insights) and the MCP server (17 tools, 5 prompts, OAuth resource server). Runbook: [docs/02-operations.md](docs/02-operations.md). What comes next and why: [docs/03-features.md](docs/03-features.md). In the canvas, press `?` for keyboard shortcuts. Design: [docs/01-design.md](docs/01-design.md).
 
 ## Start locally on Windows
 
@@ -58,7 +58,7 @@ Keep `.local` private: it holds the device token, verifiers and the database.
 | `src/Sprawl.Domain` | Pure logic: batch engine, deterministic placement, op diff, undo and revert, outline rendering |
 | `src/Sprawl.Api` | ASP.NET Core API: SQLite store and migrations, single write path, FTS5 search, SSE, owner and device auth; serves the built SPA |
 | `src/Sprawl.Web` | Vite + React + TypeScript canvas: React Flow, semantic zoom, live SSE, light and dark themes; Vitest for the logic |
-| `src/Sprawl.Mcp` | Stateless MCP server: 15 tools, 3 prompts, OAuth resource server for Orbit Identity, calls the API with its own device token |
+| `src/Sprawl.Mcp` | Stateless MCP server: 17 tools, 5 prompts, OAuth resource server for Orbit Identity, calls the API with its own device token |
 | `tests/Sprawl.Domain.Tests` | Placement goldens and randomized invariants, batches, history, outline |
 | `tests/Sprawl.Api.Tests` | Endpoints in-process: concurrency (412/428), idempotency, atomicity, snapshots, trash, SSE, auth on both listeners |
 | `tests/Sprawl.Mcp.Tests` | Scopes and tool discovery, protected-resource metadata, token rejection (audience, issuer, type, algorithm, subject), dev bearer refused outside Development, a full tool session against the real API |

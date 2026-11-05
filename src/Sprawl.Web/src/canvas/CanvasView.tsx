@@ -8,9 +8,12 @@ import { Palette, type PaletteEntry, type PaletteMode } from "../palette/Palette
 import { CardPanel } from "./CardPanel";
 import { Composer, type ComposerMode } from "./Composer";
 import { edgeTypes } from "./edges";
-import { absolute, toEdges, toNodes, type SprawlNode } from "./flow";
+import { absolute, LINK_EDGE_PREFIX, toEdges, toLinkEdges, toNodes, type SprawlNode } from "./flow";
 import { regionAt, relativeTo } from "./geometry";
 import { HistoryPanel } from "./HistoryPanel";
+import { InsightsPanel } from "./InsightsPanel";
+import { LinkContext, type LinkActions } from "./parts";
+import { LinkIndex } from "./semantics";
 import { warmTidy } from "./tidy";
 import { nodeTypes, ZoomLevelContext } from "./nodes";
 import { Shortcuts } from "./Shortcuts";
@@ -30,7 +33,7 @@ export function CanvasView(props: Props) {
   );
 }
 
-type Panel = { kind: "card"; id: string } | { kind: "history" } | null;
+type Panel = { kind: "card"; id: string } | { kind: "history" } | { kind: "insights" } | null;
 type Composing = (ComposerMode & { region?: string; at?: { x: number; y: number } }) | null;
 
 function Flow({ canvas, initialFocus }: Props) {
@@ -39,9 +42,11 @@ function Flow({ canvas, initialFocus }: Props) {
   const [nodes, setNodes] = useState<SprawlNode[]>(() => toNodes(doc, canvas.fresh));
   const [panel, setPanel] = useState<Panel>(null);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
   const [composing, setComposing] = useState<Composing>(null);
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
+  const [presenting, setPresenting] = useState<number | null>(null);
   const dragging = useRef(false);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const focusedInitial = useRef(false);
@@ -56,7 +61,9 @@ function Flow({ canvas, initialFocus }: Props) {
     });
   }, [doc, canvas.fresh, level]);
 
-  const edges = useMemo(() => toEdges(doc.connections, level), [doc.connections, level]);
+  const linkIndex = useMemo(() => new LinkIndex(doc), [doc]);
+  const textLinks = useMemo(() => linkIndex.links(doc), [doc, linkIndex]);
+  const edges = useMemo(() => [...toEdges(doc.connections, level), ...toLinkEdges(textLinks, doc.connections, level)], [doc.connections, level, textLinks]);
   const onNodesChange = useCallback((changes: NodeChange<SprawlNode>[]) => setNodes((current) => applyNodeChanges(changes, current)), []);
 
   /** Centre an item at reading zoom (works from the zoomed-out map, where cards are not nodes). */
@@ -69,6 +76,26 @@ function Flow({ canvas, initialFocus }: Props) {
   }, [doc, flow]);
 
   const openCard = useCallback((id: string) => { focus(id); setPanel({ kind: "card", id }); }, [focus]);
+
+  /** From a panel: a card opens in the panel, a region is focused. */
+  const openOrFocus = useCallback((id: string) => (id.startsWith("cd_") ? openCard(id) : focus(id)), [focus, openCard]);
+
+  const openPalette = useCallback((mode: PaletteMode, query = "") => { setPaletteQuery(query); setPalette(mode); }, []);
+  const showTag = useCallback((tag: string) => openPalette("canvas", `#${tag}`), [openPalette]);
+
+  /** `[[links]]` open their card; a link naming no card yet offers to create it beside the card that links to it. */
+  const linkActions = useMemo<LinkActions>(() => ({
+    open: (target) => {
+      const found = linkIndex.resolve(target);
+      if (found) { openCard(found.id); return; }
+      const from = panel?.kind === "card" ? doc.cards.find((c) => c.id === panel.id) : undefined;
+      canvas.say(`No card called "${target}" yet.`, { action: { label: "Create it", run: () => void canvas.write([{
+        type: "addCard", ref: "new", kind: "note", title: target, ...(from?.regionId ? { region: from.regionId } : {}),
+      }], []).then((result) => { const id = result?.refs["new"]; if (id) window.setTimeout(() => openCard(id), 300); }) } });
+    },
+    tag: showTag,
+    exists: (target) => linkIndex.resolve(target) !== undefined,
+  }), [canvas, doc.cards, linkIndex, openCard, panel, showTag]);
 
   useEffect(() => {
     if (focusedInitial.current || !initialFocus) return;
@@ -158,7 +185,8 @@ function Flow({ canvas, initialFocus }: Props) {
   }, [canvas, focus]);
 
   const deleteSelection = useCallback(() => {
-    const { nodes: ids, edges: edgeIds } = selection();
+    const { nodes: ids, edges: allEdges } = selection();
+    const edgeIds = allEdges.filter((id) => !id.startsWith(LINK_EDGE_PREFIX));
     const cards = ids.filter((id) => id.startsWith("cd_"));
     const regions = ids.filter((id) => id.startsWith("rg_"));
     if (cards.length === 0 && edgeIds.length === 0 && regions.length === 0) return;
@@ -168,13 +196,31 @@ function Flow({ canvas, initialFocus }: Props) {
     if (cards.length === 0 && edgeIds.length === 0 && emptyRegions.length === 0) return;
     void canvas.write([
       ...(cards.length > 0 ? [{ type: "deleteCards" as const, ids: cards }] : []),
-      ...edgeIds.map((id) => ({ type: "disconnect" as const, id })),
+      ...edgeIds.filter((id) => !id.startsWith(LINK_EDGE_PREFIX)).map((id) => ({ type: "disconnect" as const, id })),
       ...emptyRegions.map((id) => ({ type: "deleteRegion" as const, id })),
     ], [...cards, ...edgeIds, ...emptyRegions]).then((result) => {
       if (result?.changed) canvas.say(result.summary, { action: { label: "Undo", run: () => void canvas.undoVersion(result.version) } });
     });
     if (panel?.kind === "card" && cards.includes(panel.id)) setPanel(null);
   }, [canvas, doc.cards, doc.regions, panel, selection]);
+
+  /** Present: top-level regions in reading order, one per step, framed to fill the screen. */
+  const steps = useMemo(() => doc.regions.filter((r) => r.parentId === null).sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id)), [doc.regions]);
+  const present = useCallback((index: number | null) => {
+    if (index === null || steps.length === 0) { setPresenting(null); return; }
+    const step = Math.max(0, Math.min(index, steps.length - 1));
+    setPresenting(step);
+    setPanel(null);
+    const region = steps[step]!;
+    void flow.fitBounds({ x: region.x, y: region.y, width: region.w, height: region.h }, { padding: 0.08, duration: 500 });
+  }, [flow, steps]);
+
+  const download = useCallback((format: "markdown" | "json-canvas") => {
+    const link = document.createElement("a");
+    link.href = api.exportUrl(doc.meta.id, format);
+    link.download = "";
+    link.click();
+  }, [doc.meta.id]);
 
   const tidySelection = useCallback(() => {
     const selected = selection().nodes[0];
@@ -185,8 +231,10 @@ function Flow({ canvas, initialFocus }: Props) {
   const actions = useMemo<PaletteEntry[]>(() => [
     { id: "new-card", group: "Actions", label: "New card", keys: "N", run: startCard },
     { id: "new-region", group: "Actions", label: "New region", keys: "⇧N", run: () => setComposing({ kind: "region" }) },
-    { id: "search", group: "Actions", label: "Search this canvas", keys: "/", run: () => window.setTimeout(() => setPalette("canvas")) },
-    { id: "search-all", group: "Actions", label: "Search all canvases", keys: "Ctrl ⇧F", run: () => window.setTimeout(() => setPalette("global")) },
+    { id: "search", group: "Actions", label: "Search this canvas", keys: "/", run: () => window.setTimeout(() => openPalette("canvas")) },
+    { id: "search-all", group: "Actions", label: "Search all canvases", keys: "Ctrl ⇧F", run: () => window.setTimeout(() => openPalette("global")) },
+    { id: "tags", group: "Actions", label: "Browse by tag", hint: "#tag", run: () => window.setTimeout(() => openPalette("canvas", "#")) },
+    { id: "insights", group: "Actions", label: "Insights", hint: "gaps, orphans, missing cards", keys: "I", run: () => setPanel({ kind: "insights" }) },
     { id: "tidy", group: "Actions", label: "Tidy canvas", run: () => void canvas.tidy(null) },
     { id: "tidy-region", group: "Actions", label: "Tidy selected region", keys: "T", run: tidySelection },
     { id: "fit", group: "Actions", label: "Fit canvas", keys: "⇧F", run: () => void flow.fitView({ duration: 300, padding: 0.1 }) },
@@ -196,19 +244,31 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "undo", group: "Actions", label: "Undo", keys: "Ctrl Z", run: () => void canvas.undo() },
     { id: "redo", group: "Actions", label: "Redo", keys: "Ctrl ⇧Z", run: () => void canvas.redo() },
     { id: "history", group: "Actions", label: "History", keys: "H", run: () => setPanel({ kind: "history" }) },
+    { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
+    { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
+    { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
+    { id: "copy-md", group: "Actions", label: "Copy canvas as Markdown", run: () => void api.exportMarkdown(doc.meta.id)
+      .then((text) => navigator.clipboard.writeText(text)).then(() => canvas.say("Copied the canvas as Markdown."), () => canvas.say("Could not copy the canvas.")) },
     { id: "theme", group: "Actions", label: "Switch theme", run: () => applyTheme(nextTheme(readTheme())) },
     { id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", keys: "?", run: () => setShortcuts(true) },
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, flow, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, download, flow, openPalette, present, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key;
-      if (mod && key.toLowerCase() === "k") { event.preventDefault(); setPalette((open) => (open ? null : "all")); return; }
-      if (mod && event.shiftKey && key.toLowerCase() === "f") { event.preventDefault(); setPalette("global"); return; }
+      if (presenting !== null && !mod) {
+        const moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
+        if (key === "Escape") { event.preventDefault(); present(null); return; }
+        if (key === "Home") { event.preventDefault(); present(0); return; }
+        if (key === "End") { event.preventDefault(); present(steps.length - 1); return; }
+        if (moves[key] !== undefined) { event.preventDefault(); present(presenting + moves[key]!); return; }
+      }
+      if (mod && key.toLowerCase() === "k") { event.preventDefault(); setPaletteQuery(""); setPalette((open) => (open ? null : "all")); return; }
+      if (mod && event.shiftKey && key.toLowerCase() === "f") { event.preventDefault(); openPalette("global"); return; }
       // Keys typed into a field are text, not shortcuts. (The target is not always an element, e.g. the window.)
       const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true]") !== null;
       if (typing || palette || shortcuts || composing) return;
@@ -220,7 +280,10 @@ function Flow({ canvas, initialFocus }: Props) {
       if (zoomTo[key]) { void flow.zoomTo(LEVEL_ZOOM[zoomTo[key]!], { duration: 250 }); return; }
       const selected = selection().nodes;
       switch (key) {
-        case "/": event.preventDefault(); setPalette("canvas"); return;
+        case "/": event.preventDefault(); openPalette("canvas"); return;
+        case "#": event.preventDefault(); openPalette("canvas", "#"); return;
+        case "p": present(0); return;
+        case "i": setPanel((p) => (p?.kind === "insights" ? null : { kind: "insights" })); return;
         case "?": setShortcuts(true); return;
         case "N": event.preventDefault(); setComposing({ kind: "region" }); return;
         case "n": event.preventDefault(); startCard(); return;
@@ -236,13 +299,14 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, deleteSelection, flow, focus, palette, selection, shortcuts, startCard, tidySelection]);
+  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, selection, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
   return (
     <ZoomLevelContext.Provider value={level}>
-      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <LinkContext.Provider value={linkActions}>
+      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -269,6 +333,15 @@ function Flow({ canvas, initialFocus }: Props) {
           <Background gap={24} size={1} />
           <ZoomTracker onLevel={setLevel} />
         </ReactFlow>
+        {presenting !== null && steps[presenting] && (
+          <div className="presenter" role="status" aria-live="polite">
+            <button type="button" className="icon-button" aria-label="Previous region" disabled={presenting === 0} onClick={() => present(presenting - 1)}>‹</button>
+            <span className="presenter-title">{steps[presenting]!.title}</span>
+            <span className="presenter-count">{presenting + 1} / {steps.length}</span>
+            <button type="button" className="icon-button" aria-label="Next region" disabled={presenting === steps.length - 1} onClick={() => present(presenting + 1)}>›</button>
+            <button type="button" className="quiet small" onClick={() => present(null)}>Done <kbd>Esc</kbd></button>
+          </div>
+        )}
         {connectFrom && (
           <div className="mode-banner" role="status">Connect <strong>{connectTitle}</strong> to… click a card or region · <kbd>Esc</kbd> cancels</div>
         )}
@@ -284,16 +357,20 @@ function Flow({ canvas, initialFocus }: Props) {
             <button type="button" className="quiet" aria-label="Dismiss" onClick={canvas.dismissNotice}>×</button>
           </div>
         )}
-        {panel?.kind === "card" && <CardPanel doc={doc} cardId={panel.id} write={canvas.write} onClose={() => setPanel(null)} onFocus={focus} />}
+        {panel?.kind === "card" && <CardPanel doc={doc} cardId={panel.id} write={canvas.write} onClose={() => setPanel(null)} onFocus={openOrFocus} onTag={showTag} />}
+        {panel?.kind === "insights" && (
+          <InsightsPanel canvasId={doc.meta.id} version={doc.version} write={canvas.write} onFocus={focus} onTag={showTag} say={(text) => canvas.say(text)} onClose={() => setPanel(null)} />
+        )}
         {panel?.kind === "history" && (
           <HistoryPanel canvasId={doc.meta.id} version={doc.version} onUndo={(v) => void canvas.undoVersion(v)} onRevert={(v) => void canvas.revertTo(v)} onClose={() => setPanel(null)} />
         )}
       </div>
       {palette && (
-        <Palette mode={palette} doc={doc} actions={actions} onClose={() => setPalette(null)} onFocus={focus} onOpenCard={openCard}
+        <Palette mode={palette} doc={doc} initialQuery={paletteQuery} actions={actions} onClose={() => setPalette(null)} onFocus={focus} onOpenCard={openCard}
           onOpenCanvas={(id, card) => navigate(`/c/${id}${card ? `?focus=${card}` : ""}`)} />
       )}
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
+      </LinkContext.Provider>
     </ZoomLevelContext.Provider>
   );
 }

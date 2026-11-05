@@ -113,3 +113,42 @@ button.danger:hover { border-color: var(--danger); }
 }
 .mode-banner strong { color: var(--text); font-weight: 550; }
 .is-connecting .react-flow__node { cursor: crosshair; }
+
+/* Links, tags and insights. */
+button.small { padding: 2px 8px; font-size: 12px; }
+.panel-actions { display: flex; align-items: center; gap: 4px; }
+.panel-section h4 .count { margin-left: 4px; font-weight: 500; color: var(--text-faint); }
+.refs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.refs li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; font-size: 13px; min-height: 26px; }
+.refs .kind-glyph { color: var(--text-faint); }
+.refs li.gap { grid-template-columns: minmax(0, 1fr) auto; }
+.refs li.gap .ref-detail { grid-column: 1; grid-row: 2; }
+.refs li.gap > button { grid-column: 2; grid-row: 1 / span 2; }
+.gap-pair { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-faint); }
+.ref-detail { color: var(--text-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.ref-missing { color: var(--text-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; grid-column: 1 / span 2; }
+.refs li:has(> .ref-missing) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.refs li:has(> .ref-missing) .ref-missing { grid-column: auto; }
+.insight-stats { margin: 0; font-size: 12px; color: var(--text-faint); }
+.tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-chip {
+  display: inline-flex; align-items: baseline; gap: 4px; padding: 0 6px; border: 0; border-radius: 999px;
+  font: 500 11.5px/20px var(--font); color: var(--text-muted); background: var(--surface-2); cursor: pointer;
+}
+.tag-chip:hover { color: var(--text); }
+.tag-chip span { color: var(--text-faint); }
+.wikilink {
+  display: inline; padding: 0; border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--accent-ring); text-underline-offset: 2px;
+}
+.wikilink.is-missing { color: var(--text-muted); text-decoration-style: dashed; text-decoration-color: var(--border-strong); }
+
+/* Present mode: a quiet caption bar; the canvas is the slide. */
+.presenter {
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9;
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow-raised);
+  animation: arrive 140ms ease-out;
+}
+.presenter-title { font-weight: 600; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presenter-count { color: var(--text-faint); font-variant-numeric: tabular-nums; font-size: 12px; }

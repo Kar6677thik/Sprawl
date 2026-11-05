@@ -210,3 +210,54 @@ export function kindOf(id: string): EntityKind {
     default: return "unknown";
   }
 }
+
+export interface CardRef {
+  id: string;
+  title: string;
+  kind: CardKind;
+  regionId: string | null;
+  regionTitle: string | null;
+}
+
+export interface RelatedCard {
+  card: CardRef;
+  score: number;
+  sharedTerms: string[];
+}
+
+export interface CardContext {
+  canvasId: string;
+  version: number;
+  card: CardRef;
+  tags: string[];
+  links: CardRef[];
+  unresolvedLinks: string[];
+  backlinks: CardRef[];
+  mentions: CardRef[];
+  related: RelatedCard[];
+}
+
+export interface RegionGap {
+  firstId: string;
+  firstTitle: string;
+  secondId: string;
+  secondTitle: string;
+  similarity: number;
+  sharedTerms: string[];
+}
+
+export interface CanvasInsights {
+  canvasId: string;
+  version: number;
+  cards: number;
+  regions: number;
+  connections: number;
+  textLinks: number;
+  gaps: RegionGap[];
+  orphans: CardRef[];
+  danglingLinks: { target: string; from: CardRef[] }[];
+  openQuestions: CardRef[];
+  contradictions: { connectionId: string; fromId: string; fromTitle: string; toId: string; toTitle: string; label: string | null }[];
+  hubs: { card: CardRef; degree: number }[];
+  tags: { tag: string; count: number }[];
+}

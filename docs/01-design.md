@@ -141,6 +141,10 @@ Everything is under `/api/v1`. Errors are RFC 9457 `application/problem+json` wi
 | `GET /canvases/{id}/history?before=&limit=` | Batch list | |
 | `GET /canvases/{id}/history/{version}` | Ops of one batch | |
 | `GET /canvases/{id}/state?version=` | Materialized past state (timeline and replay, M6) | |
+| `GET /canvases/{id}/insights` | Gaps between regions, orphans, dangling `[[links]]`, open questions, contradictions, hubs, tags ([03-features.md](03-features.md)) | ETag |
+| `GET /canvases/{id}/cards/{cardId}/context` | A card's tags, links, backlinks, unlinked mentions and related cards | ETag |
+| `GET /canvases/{id}/export?format=markdown\|json-canvas` | Download as Markdown or JSON Canvas 1.0 (`.canvas`, with a `sprawlKind` extension per card) | |
+| `POST /canvases/import` `{title, canvas}` | A JSON Canvas as a new canvas, in one create batch of up to 9,300 intents | Owner only; 8 MiB body |
 | `POST /cards/query` `{ids}` | Full cards plus their connections | ≤ 50 IDs; IDs are global, so no canvas ID is needed |
 | `GET /search?q=&canvas=&kind=&limit=` | FTS5 across canvases, with snippets | |
 | `GET /canvases/{id}/events` | SSE | Owner session only. Event ID = version; supports `Last-Event-ID`, 25 s heartbeat comment |
@@ -290,6 +294,8 @@ Annotations are R = readOnlyHint, D = destructiveHint and I = idempotentHint. Ev
 | `get_canvas` | read | ✓/–/✓ | `canvasId`, `region?` (ID or title), `depth?="short"` (`regions`\|`titles`\|`short`\|`full`), `includeConnections?=true`, `maxCards?=400 (1-1000)` | **Call it before expanding or reorganizing.** Returns the text outline and version. For big canvases, read `regions` first, then one region at `full` |
 | `get_cards` | read | ✓/–/✓ | `cardIds[1-50]` | Full bodies and connections for specific cards, e.g. before rewriting them |
 | `get_history` | read | ✓/–/✓ | `canvasId`, `limit?=20 (1-100)`, `beforeVersion?` | What changed, when and by whom. Use it before `revert_canvas` |
+| `get_card_context` | read | ✓/–/✓ | `canvasId`, `cardId` | A card's `#tags`, `[[links]]` (and ones naming no card yet), backlinks, unlinked mentions and related cards it is not connected to. Use it before connecting or expanding around a card |
+| `analyze_canvas` | read | ✓/–/✓ | `canvasId` | Gaps between regions, orphans, dangling links, open questions, contradictions, hubs and tag counts. Use it to decide what to add next |
 | `create_canvas` | write | –/–/✓\* | `title`, `description?`, `tags?[]`, `collection?`, `seed?: {regions?, cards?, connections?}`, `requestId?` | Create a canvas for a new topic, ideally seeded with 3-6 regions and their first cards in one call. Check `list_canvases` first |
 | `add_to_canvas` | write | –/–/✓\* | `canvasId`, `regions?[]`, `cards?[]`, `connections?[]` (≤ 100 items), `createMissingRegions?=true`, `onDuplicate?="skip"` (`skip`\|`add`\|`fail`), `expectedVersion?`, `requestId?` | Add regions, cards and connections in one **atomic** batch. Temp `ref`s let connections point at cards created in the same call. Returns `refs → ids` and skipped duplicates (same normalized title in the same region) |
 | `update_cards` | write | –/✓/✓ | `canvasId`, `updates[1-50]: {cardId, title?, body?, appendBody?, kind?, url?, language?, emphasis?, tint?}`, `expectedVersion?` | Improve or correct existing cards (e.g. "make weak cards better"). Pass `expectedVersion` from your last read |
@@ -651,7 +657,7 @@ The images ran hardened in Production mode, including a real password + TOTP sig
 - the Restricted namespace and Orbit's catalog onboarding kit, admission policy and render
 - the network policies
 - a backup to restic, then a restore |
-| M6 | Not started |
+| M6 | Replaced by the ranked plan in [03-features.md](03-features.md). **P1 (knowledge graph) built 5 Nov:** `[[links]]` and `#tags` read from card text, backlinks, unlinked mentions, related cards, canvas insights; 2 MCP tools (17 in all) and 2 prompts (5); the card panel, Insights panel (I), `#tag` palette filter and dotted link edges. **P2 (output and presenting) built 5 Nov, except PNG:** Markdown and JSON Canvas export, JSON Canvas import, present mode (P). 46 domain, 25 API, 22 MCP and 38 web tests |
 
 ### What M5 changed from this design
 

@@ -19,6 +19,8 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["get_canvas"] = (true, false, true, "canvas.read"),
             ["get_cards"] = (true, false, true, "canvas.read"),
             ["get_history"] = (true, false, true, "canvas.read"),
+            ["get_card_context"] = (true, false, true, "canvas.read"),
+            ["analyze_canvas"] = (true, false, true, "canvas.read"),
             ["create_canvas"] = (false, false, false, "canvas.write"),
             ["add_to_canvas"] = (false, false, false, "canvas.write"),
             ["update_cards"] = (false, true, true, "canvas.write"),
@@ -53,7 +55,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["expand_region", "review_canvas", "seed_canvas"], names);
+        Assert.Equal(["expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",
@@ -124,6 +126,14 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
 
         Rpc.Data(await Rpc.Call(client, Everyday, "update_cards", new { canvasId, updates = new[] { new { cardId = join, appendBody = "So replicas converge." } }, expectedVersion = 2 }));
         var full = Rpc.Data(await Rpc.Call(client, Everyday, "get_cards", new { cardIds = new[] { join } }));
+
+        // Text links and analysis: the delta card does not mention the join card yet, so it is a candidate, not a backlink.
+        var context = Rpc.Data(await Rpc.Call(client, Everyday, "get_card_context", new { canvasId, cardId = join }));
+        Assert.Equal(join, context.GetProperty("card").GetProperty("id").GetString());
+        Assert.Equal(0, context.GetProperty("backlinks").GetArrayLength());
+        var analysis = Rpc.Data(await Rpc.Call(client, Everyday, "analyze_canvas", new { canvasId }));
+        Assert.Equal(3, analysis.GetProperty("cards").GetInt32());
+        Assert.Equal(1, analysis.GetProperty("openQuestions").GetArrayLength());
         Assert.EndsWith("So replicas converge.", full[0].GetProperty("body").GetString());
         Assert.Equal("State-based", full[0].GetProperty("region").GetString());
         Assert.False(full[0].GetProperty("placedByOwner").GetBoolean());

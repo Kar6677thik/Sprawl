@@ -37,6 +37,8 @@ public sealed partial class BatchEngine
     private readonly List<string> notes = [];
     private int index;
 
+    private int maxIntents = Limits.IntentsPerBatch;
+
     private BatchEngine(CanvasState original, BatchRequest request, Actor actor, DateTimeOffset now, IIdGenerator ids)
     {
         this.original = original;
@@ -55,14 +57,14 @@ public sealed partial class BatchEngine
     }
 
     /// <summary>A new canvas: the create op for its metadata plus an optional seed batch, as one version.</summary>
-    public static EngineResult Create(string canvasId, CreateCanvasRequest create, Actor actor, DateTimeOffset now, IIdGenerator ids)
+    public static EngineResult Create(string canvasId, CreateCanvasRequest create, Actor actor, DateTimeOffset now, IIdGenerator ids, int maxIntents = Limits.IntentsPerBatch)
     {
         var meta = new CanvasMeta(canvasId, Text.Title(create.Title, Limits.CanvasTitle, "title"), Text.Description(create.Description),
             Text.Tags(create.Tags ?? []), Text.Collection(create.Collection), false, false, now);
         var empty = new CanvasState();
         var seeded = new CanvasState { Meta = meta };
         var batch = new BatchRequest(create.Intents ?? [], create.RequestId, BatchKinds.Create, OnDuplicate: create.OnDuplicate);
-        var engine = new BatchEngine(seeded, batch, actor, now, ids);
+        var engine = new BatchEngine(seeded, batch, actor, now, ids) { maxIntents = maxIntents };
         var result = engine.Run();
         var ops = StateOps.Diff(empty, engine.state);
         return result with { Ops = ops, Summary = "Created canvas" + (result.Ops.Count > 0 ? "; " + result.Summary : "") };
@@ -70,7 +72,7 @@ public sealed partial class BatchEngine
 
     private EngineResult Run()
     {
-        if (request.Intents.Count > Limits.IntentsPerBatch) throw SprawlException.Limit($"A batch holds at most {Limits.IntentsPerBatch} intents.");
+        if (request.Intents.Count > maxIntents) throw SprawlException.Limit($"A batch holds at most {maxIntents} intents.");
         if (request.OnDuplicate is not (DuplicatePolicies.Skip or DuplicatePolicies.Add or DuplicatePolicies.Fail))
             throw SprawlException.Invalid("onDuplicate must be skip, add or fail.");
         var kind = request.Kind ?? BatchKinds.Edit;

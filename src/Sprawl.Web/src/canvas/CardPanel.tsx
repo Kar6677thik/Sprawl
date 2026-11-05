@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Intent } from "../api/types";
+import { CardLinks } from "./CardLinks";
 import { Body, KindGlyph } from "./parts";
 
 const KINDS: CardKind[] = ["idea", "note", "question", "link", "code"];
@@ -11,10 +12,11 @@ interface Props {
   write: (intents: Intent[], touched: string[]) => Promise<unknown>;
   onClose: () => void;
   onFocus: (id: string) => void;
+  onTag: (tag: string) => void;
 }
 
 /** Read and edit one card. Fields save when they lose focus (or Ctrl+Enter); kind and emphasis save immediately. */
-export function CardPanel({ doc, cardId, write, onClose, onFocus }: Props) {
+export function CardPanel({ doc, cardId, write, onClose, onFocus, onTag }: Props) {
   const card = doc.cards.find((c) => c.id === cardId);
   if (!card) {
     return (
@@ -24,10 +26,10 @@ export function CardPanel({ doc, cardId, write, onClose, onFocus }: Props) {
       </aside>
     );
   }
-  return <CardEditor key={card.id} doc={doc} card={card} write={write} onClose={onClose} onFocus={onFocus} />;
+  return <CardEditor key={card.id} doc={doc} card={card} write={write} onClose={onClose} onFocus={onFocus} onTag={onTag} />;
 }
 
-function CardEditor({ doc, card, write, onClose, onFocus }: Omit<Props, "cardId"> & { card: Card }) {
+function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "cardId"> & { card: Card }) {
   const [title, setTitle] = useState(card.title);
   const [body, setBody] = useState(card.body);
   const [url, setUrl] = useState(card.url ?? "");
@@ -75,7 +77,7 @@ function CardEditor({ doc, card, write, onClose, onFocus }: Omit<Props, "cardId"
           <input value={url} placeholder="https://…" onFocus={() => { focused.current = "url"; }} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} />
         </label>
         <div className="field">
-          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : "Notes"} <em>(markdown)</em></span>
+          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : "Notes"} <em>(markdown · [[Card]] links · #tags)</em></span>
           {editingBody || card.body.length === 0 ? (
             <textarea
               className={card.kind === "code" ? "is-code" : ""} rows={10} value={body} autoFocus={editingBody} aria-label="Body"
@@ -100,6 +102,7 @@ function CardEditor({ doc, card, write, onClose, onFocus }: Omit<Props, "cardId"
             </ul>
           </section>
         )}
+        <CardLinks doc={doc} card={card} write={write} onFocus={onFocus} onTag={onTag} />
         <footer className="panel-footer">
           <span className="panel-meta">{card.createdBy === "ai" ? "Added by Claude" : "Added by you"} · {new Date(card.createdAt).toLocaleDateString()}</span>
           <button type="button" className="danger" onClick={() => { void write([{ type: "deleteCards", ids: [card.id] }], [card.id]); onClose(); }}>Delete</button>

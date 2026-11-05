@@ -49,4 +49,31 @@ public sealed class CanvasPrompts
         3. Connect the most important relationships across regions.
         Keep bodies short. Finish with the region names and the open questions.
         """;
+
+    [McpServerPrompt(Name = "find_gaps", Title = "Bridge the gaps")]
+    [Description("Find the structural gaps, orphans and missing cards on a canvas, and fill the most valuable ones.")]
+    public static string FindGaps([Description("The canvas id (cv_…) or its title.")] string canvas) =>
+        $"""
+        Strengthen the structure of the Sprawl canvas "{canvas}".
+        1. If you only have a title, call list_canvases to find the canvas id. Call analyze_canvas and get_canvas (depth=titles).
+        2. For the top gaps (regions that share terms but are not connected), work out the idea or question that links them. Add it as a card
+           in the region it fits best and connect it to a card on each side; if nothing honest links them, say so instead.
+        3. Write a card for each dangling [[link]] that deserves one (title exactly as linked, so the link resolves).
+        4. Connect each orphan to the card it most relates to (use get_card_context to see its related cards), or say why it stands alone.
+        5. One add_to_canvas call with refs, expectedVersion and a requestId. Finish with a short list of what you bridged.
+        """;
+
+    [McpServerPrompt(Name = "synthesize_region", Title = "Synthesize a region")]
+    [Description("Distil a region into one key summary card, linked to the cards it draws on.")]
+    public static string SynthesizeRegion(
+        [Description("The canvas id (cv_…) or its title.")] string canvas,
+        [Description("The region to synthesize (title or id).")] string region) =>
+        $"""
+        Synthesize the "{region}" region of the Sprawl canvas "{canvas}".
+        1. Call get_canvas with region="{region}" and depth=full.
+        2. Write one note card titled "Synthesis: <region>" with emphasis key: the 3-6 claims the region supports, each citing the cards it
+           rests on as [[Card title]] links, then what is still contested (cite contradicting cards) and what is still open (cite questions).
+        3. Add it to the region with add_to_canvas (expectedVersion, requestId). If a synthesis card exists, update it with update_cards instead.
+        Do not restate every card; the synthesis is what someone reads first.
+        """;
 }

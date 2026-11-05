@@ -96,3 +96,48 @@ public sealed record CanvasEvent(
     string Summary,
     IReadOnlyList<OpRecord> Ops,
     DateTimeOffset CreatedAt);
+
+/// <summary>A card named in an analysis: enough to show and jump to it.</summary>
+public sealed record CardRef(string Id, string Title, string Kind, string? RegionId, string? RegionTitle);
+
+/// <param name="SharedTerms">The words (and <c>#tags</c>) the two cards have in common, most telling first.</param>
+public sealed record RelatedCard(CardRef Card, double Score, IReadOnlyList<string> SharedTerms);
+
+/// <summary>A card's place in the canvas's web of meaning, derived from text and connections.</summary>
+public sealed record CardContext(
+    string CanvasId,
+    long Version,
+    CardRef Card,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<CardRef> Links,
+    IReadOnlyList<string> UnresolvedLinks,
+    IReadOnlyList<CardRef> Backlinks,
+    IReadOnlyList<CardRef> Mentions,
+    IReadOnlyList<RelatedCard> Related);
+
+/// <summary>Two regions that talk about the same things but have no connection or link between them.</summary>
+public sealed record RegionGap(string FirstId, string FirstTitle, string SecondId, string SecondTitle, double Similarity, IReadOnlyList<string> SharedTerms);
+
+/// <summary>A <c>[[target]]</c> that names no card yet, and the cards that use it.</summary>
+public sealed record DanglingLink(string Target, IReadOnlyList<CardRef> From);
+
+public sealed record TagCount(string Tag, int Count);
+
+public sealed record Hub(CardRef Card, int Degree);
+
+public sealed record EdgeRef(string ConnectionId, string FromId, string FromTitle, string ToId, string ToTitle, string? Label);
+
+public sealed record CanvasInsights(
+    string CanvasId,
+    long Version,
+    int Cards,
+    int Regions,
+    int Connections,
+    int TextLinks,
+    IReadOnlyList<RegionGap> Gaps,
+    IReadOnlyList<CardRef> Orphans,
+    IReadOnlyList<DanglingLink> DanglingLinks,
+    IReadOnlyList<CardRef> OpenQuestions,
+    IReadOnlyList<EdgeRef> Contradictions,
+    IReadOnlyList<Hub> Hubs,
+    IReadOnlyList<TagCount> Tags);

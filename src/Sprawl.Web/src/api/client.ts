@@ -1,4 +1,4 @@
-import type { BatchRequest, BatchResult, CanvasDocument, CanvasSummary, HistoryEntry, SearchResult, Session } from "./types";
+import type { BatchRequest, BatchResult, CanvasDocument, CanvasInsights, CardContext, CanvasSummary, HistoryEntry, SearchResult, Session } from "./types";
 
 /** A refused request, carrying the API's stable problem `code` (see ErrorCodes in Sprawl.Contracts). */
 export class ApiError extends Error {
@@ -44,6 +44,23 @@ export class SprawlClient {
 
   batch = (id: string, request: BatchRequest, ifMatch?: number) =>
     this.json<BatchResult>("POST", `/api/v1/canvases/${encodeURIComponent(id)}/batches`, { requestId: crypto.randomUUID(), ...request }, ifMatch);
+
+  insights = (id: string) => this.json<CanvasInsights>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/insights`);
+
+  cardContext = (id: string, cardId: string) =>
+    this.json<CardContext>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/cards/${encodeURIComponent(cardId)}/context`);
+
+  /** A same-origin download URL (the session cookie authorizes it). */
+  exportUrl = (id: string, format: "markdown" | "json-canvas") => `/api/v1/canvases/${encodeURIComponent(id)}/export?format=${format}`;
+
+  exportMarkdown = async (id: string) => {
+    const response = await this.fetcher(this.exportUrl(id, "markdown"), { credentials: "same-origin", headers: { Accept: "text/markdown" } });
+    if (!response.ok) throw toError(response.status, await response.text());
+    return response.text();
+  };
+
+  importCanvas = (title: string, canvas: unknown) =>
+    this.json<BatchResult>("POST", "/api/v1/canvases/import", { title, canvas, requestId: crypto.randomUUID() });
 
   undo = (id: string, version: number) =>
     this.json<BatchResult>("POST", `/api/v1/canvases/${encodeURIComponent(id)}/batches/${version}/undo`);

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { api } from "../api/client";
 import type { CanvasSummary } from "../api/types";
 import { navigate } from "../router";
@@ -16,6 +16,23 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
     }, query ? 150 : 0);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  const file = useRef<HTMLInputElement>(null);
+
+  /** A JSON Canvas file (Obsidian's .canvas) becomes a new canvas, named after the file. */
+  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const chosen = event.target.files?.[0];
+    event.target.value = "";
+    if (!chosen) return;
+    try {
+      const canvas: unknown = JSON.parse(await chosen.text());
+      const name = chosen.name.replace(/\.(canvas|json)$/i, "").trim().slice(0, 120) || "Imported canvas";
+      const result = await api.importCanvas(name, canvas);
+      navigate(`/c/${result.canvasId}`);
+    } catch (failure) {
+      setError(failure instanceof SyntaxError ? "That file is not JSON Canvas." : failure instanceof Error ? failure.message : "The import failed.");
+    }
+  };
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -40,6 +57,8 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
         <form className="new-canvas" onSubmit={create}>
           <input placeholder="New canvas: a topic to map" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="New canvas title" maxLength={120} />
           <button type="submit" className="primary" disabled={!title.trim()}>Create</button>
+          <button type="button" className="quiet" onClick={() => file.current?.click()} title="Import a JSON Canvas (.canvas) file, e.g. from Obsidian">Import…</button>
+          <input ref={file} type="file" accept=".canvas,.json,application/json" hidden onChange={(e) => void importFile(e)} />
         </form>
         {error && <p className="error" role="alert">{error}</p>}
         {canvases && canvases.length === 0 && <p className="empty">{query ? "No canvases match." : "No canvases yet. Create one, or ask Claude to."}</p>}

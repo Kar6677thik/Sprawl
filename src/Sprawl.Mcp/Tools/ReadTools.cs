@@ -94,6 +94,30 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
             return [.. (await api.Cards(cardIds, token)).Select(CardView.From)];
         }, token);
 
+    [McpServerTool(Name = "get_card_context", Title = "A card's links, backlinks and related cards", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
+    [Authorize(Policy = "scope:canvas.read")]
+    [Description("Where one card sits in the canvas's web of meaning: its #tags, the cards its [[links]] point to, [[links]] that name no card yet, " +
+        "backlinks (cards linking to it), unlinked mentions (cards naming its title without linking: candidates for a [[link]] or a connection), " +
+        "and related cards it is not yet connected to, with the terms they share. Use it before connecting or expanding around a card.")]
+    public Task<McpResult<CardContext>> GetCardContext(
+        [Description("The canvas id (cv_…).")] string canvasId,
+        [Description("The card id (cd_…).")] string cardId,
+        CancellationToken token = default) =>
+        executor.Run("get_card_context", () => api.Context(canvasId, cardId, token), token);
+
+    [McpServerTool(Name = "analyze_canvas", Title = "Find gaps and loose ends", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
+    [Authorize(Policy = "scope:canvas.read")]
+    [Description("Structural analysis of a canvas. gaps: pairs of regions that share vocabulary but have no connection or link between them (where a bridging idea " +
+        "or question is probably missing; shared terms say what they have in common). orphans: cards with no connection or link. danglingLinks: [[targets]] " +
+        "with no card yet (cards worth writing). Also open questions, contradictions, hubs (most connected cards) and #tag counts. " +
+        "Use it to decide what to add next, then act with add_to_canvas.")]
+    public Task<McpResult<CanvasInsights>> AnalyzeCanvas(
+        [Description("The canvas id (cv_…).")] string canvasId,
+        CancellationToken token = default) =>
+        executor.Run("analyze_canvas", () => api.Insights(canvasId, token), token);
+
     [McpServerTool(Name = "get_history", Title = "Read canvas history", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
     [Authorize(Policy = "scope:canvas.read")]

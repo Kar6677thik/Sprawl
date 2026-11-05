@@ -1,0 +1,60 @@
+# Sprawl feature plan: the best of comparable tools
+
+Written 5 November 2026. **Status: P1 built; P2 built except PNG export; P3–P5 not started.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+
+## 1. What the others do best
+
+| Tool | Best quality | Kept for Sprawl as |
+|---|---|---|
+| [Heptabase](https://wiki.heptabase.com/section) | Sections stay readable when zoomed out; a card can sit on many whiteboards; a journal feeds the board | Already have the far-zoom miniatures. Cross-canvas cards (P4), inbox capture (P3) |
+| [Obsidian Canvas / JSON Canvas](https://jsoncanvas.org/) | An open, plain-file canvas format; `[[wikilinks]]` and backlinks | `[[links]]` and backlinks (P1); JSON Canvas import and export (P2) |
+| [TheBrain](https://thebrain.com/products/thebrain/thebrain12) | Typed, labelled links; backlinks; "unlinked mentions" that suggest links | Unlinked mentions with a one-click "link it" (P1) |
+| [InfraNodus](https://infranodus.com/about/how-it-works) | Finds topical clusters and the *structural gaps* between them, then turns each gap into a research question; has an MCP server | `analyze_canvas`: gaps between regions, orphans, dangling links, hubs (P1) |
+| [Kinopio](https://kinopio.club/llms.txt) | `[[tags]]` across spaces, an inbox space, journal prompts | `#tags` derived from text (P1); inbox (P3) |
+| [Scrintal](https://scrintal.com/features/link-your-notes) | Links are both visual and in-text, and stay in sync | `[[links]]` render as links in the card and as dashed edges on the canvas (P1) |
+| [Miro AI](https://miro.com/blog/what-we-launched-march-2023) | Cluster stickies, summarise a cluster into one, expand a mind-map node | MCP prompts `find_gaps`, `synthesize_region` and `answer_questions` drive Claude through the same moves (P1) |
+| mymind / Napkin | Resurfaces related notes without manual linking | "Related" cards by shared rare terms and tags (P1) |
+| Muse / FigJam | Presentation and spotlight over boards; export to PDF and PNG | Present mode that walks regions in reading order; Markdown, JSON Canvas and PNG export (P2) |
+| RemNote / Logseq | Spaced repetition from questions in notes | Review open questions on a schedule (P3) |
+| Tana / Capacities | Typed nodes with fields, live queries | Tag filters in the palette now (P1); saved queries later (P5) |
+| tldraw | Ink and freeform shapes beside structured content | Ink layer (P5) |
+
+Left out on purpose: real-time multi-user collaboration (single owner), an in-app chat with its own model (Claude reaches Sprawl through MCP, so the UI stays model-free), and storing embeddings (the term-overlap measure below needs no model, no new storage and no data leaving the cluster).
+
+## 2. Ranked plan
+
+### P1: Knowledge graph (built)
+
+- **Meaning comes from the text.** `[[Card title]]` or `[[cd_…]]` in a body is a link; `#tag` in a title or body is a tag. Neither is stored separately, so they can never drift from the text, and every existing write path (UI, MCP, undo, revert) keeps them right for free. Code spans and fenced blocks are ignored. `Sprawl.Domain/Semantics.cs`.
+- **Card context** (`GET /api/v1/canvases/{id}/cards/{cardId}/context`, MCP `get_card_context`): outgoing links, unresolved links, backlinks, unlinked mentions and related cards. Related cards are scored by shared key terms, weighted by rarity on the canvas, plus shared tags and shared neighbours.
+- **Canvas insights** (`GET /api/v1/canvases/{id}/insights`, MCP `analyze_canvas`):
+  - **gaps**: pairs of regions whose cards share vocabulary but have no connection or link between them, with the shared terms (InfraNodus's structural gaps);
+  - **orphans**: cards with no connection, link or backlink;
+  - **dangling links**: `[[targets]]` that name no card yet (cards to write);
+  - **open questions**, **contradictions** and **hubs** (the most connected cards);
+  - **tags** with counts.
+- **UI:** the card panel lists links, backlinks, mentions (with "Link") and related cards, each jumping to the card; `[[links]]` in a body are clickable; `#tags` show as chips; the palette filters by `#tag`; an Insights panel (`I`) lists the analysis; text links draw as dashed edges.
+- **MCP prompts:** `find_gaps` and `synthesize_region` turn the analysis into work for Claude.
+
+### P2: Output and presenting (built, except PNG)
+
+- **Export** (`GET /api/v1/canvases/{id}/export`, palette): Markdown (regions as headings, `[[links]]` kept, so it drops into Obsidian) and JSON Canvas 1.0 (absolute geometry, regions as groups, tints as preset colours, card kinds in a `sprawlKind` extension). "Copy canvas as Markdown" puts it on the clipboard for pasting into a chat. `Sprawl.Domain/Exchange.cs`.
+- **Import** (`POST /api/v1/canvases/import`, owner only, "Import…" on the home page): groups become regions (one level of nesting; deeper groups flatten), each node joins the smallest group containing its centre, loose nodes go to *Unsorted*, the first line of text is the title (`?` makes a question, a lone fenced block makes code), link and file nodes become link and note cards, and edges become connections (a label naming a kind sets it). It is one create batch, so placement is Sprawl's own; Tidy afterwards if wanted.
+- **Present** (`P`): top-level regions in reading order, framed one per step; arrows, Space, Home/End, Esc.
+- **Not yet: PNG export.** It needs a DOM-to-image dependency; deferred until it is wanted.
+
+### P3: Capture and review
+
+- An inbox per canvas: quick capture (`Ctrl+Shift+N`, MCP `capture`) lands loose in an *Inbox* region; triage moves cards out.
+- Question review: open questions resurface on a spaced schedule (SM-2) until answered or dismissed. Needs a `reviews` table outside the op log, because review state is not canvas content.
+
+### P4: Across canvases
+
+- `[[Canvas/Card title]]` links between canvases, with backlinks listed on both sides.
+- A collections view on the home page and canvas-level graph of cross links.
+
+### P5: Freeform and time
+
+- Ink and simple shapes as a non-semantic layer Claude can see only as "sketch in region X".
+- History replay: scrub the version slider and watch the canvas grow.
+- Saved queries ("all `#risk` questions") as live palette entries.

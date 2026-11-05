@@ -85,6 +85,29 @@ export function toEdges(connections: Connection[], level: ZoomLevel): Edge[] {
   }));
 }
 
+/** Edge ids for `[[links]]` drawn from card text; they are not connections and cannot be selected or deleted. */
+export const LINK_EDGE_PREFIX = "ln:";
+
+/**
+ * `[[links]]` in card text, drawn as quiet dotted lines with an arrow. A link that duplicates a connection between the
+ * same two cards is not drawn twice. Hidden zoomed out, where cards are not nodes.
+ */
+export function toLinkEdges(links: [string, string][], connections: Connection[], level: ZoomLevel): Edge[] {
+  if (level === "far") return [];
+  const connected = new Set(connections.flatMap((c) => [`${c.sourceId}>${c.targetId}`, `${c.targetId}>${c.sourceId}`]));
+  return links.filter(([from, to]) => !connected.has(`${from}>${to}`)).map(([from, to]) => ({
+    id: `${LINK_EDGE_PREFIX}${from}:${to}`,
+    source: from,
+    target: to,
+    type: "floating",
+    className: "edge-text-link",
+    markerEnd: { type: MarkerType.Arrow, width: 12, height: 12 },
+    zIndex: 2,
+    selectable: false,
+    focusable: false,
+  }));
+}
+
 /** Absolute canvas position of a node, walking up the parent chain (needed to focus a region or card). */
 export function absolute(doc: CanvasDocument, id: string): { x: number; y: number; w: number; h: number } | undefined {
   const regions = new Map(doc.regions.map((r) => [r.id, r]));

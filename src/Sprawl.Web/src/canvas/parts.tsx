@@ -1,7 +1,17 @@
-import { memo, type ReactNode } from "react";
+import { createContext, memo, useContext, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { CardKind } from "../api/types";
+import { linkify } from "./semantics";
+
+/** What a `[[link]]` or `#tag` in a card body does when clicked; `exists` styles links that name no card yet. */
+export interface LinkActions {
+  open: (target: string) => void;
+  tag: (tag: string) => void;
+  exists: (target: string) => boolean;
+}
+
+export const LinkContext = createContext<LinkActions | null>(null);
 
 const GLYPHS: Record<CardKind, ReactNode> = {
   idea: <path d="M6 1.5a3.5 3.5 0 0 0-2 6.4V9.5h4V7.9a3.5 3.5 0 0 0-2-6.4ZM4.5 11h3" />,
@@ -30,15 +40,37 @@ export const Body = memo(function Body({ markdown }: { markdown: string }) {
       remarkPlugins={[remarkGfm]}
       disallowedElements={["img"]}
       unwrapDisallowed
-      components={{
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer nofollow" onPointerDown={(event) => event.stopPropagation()}>
-            {children}
-          </a>
-        ),
-      }}
+      components={{ a: ({ href, children }) => <BodyLink href={href}>{children}</BodyLink> }}
     >
-      {markdown}
+      {linkify(markdown)}
     </Markdown>
   );
 });
+
+function BodyLink({ href, children }: { href: string | undefined; children: ReactNode }) {
+  const actions = useContext(LinkContext);
+  const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  const internal = href?.match(/^#sprawl-(link|tag)\/(.*)$/);
+  if (internal) {
+    const value = decodeURIComponent(internal[2]!);
+    const isTag = internal[1] === "tag";
+    const missing = !isTag && actions !== null && !actions.exists(value);
+    return (
+      <button
+        type="button"
+        className={isTag ? "tag-chip" : `wikilink${missing ? " is-missing" : ""}`}
+        title={isTag ? `Cards tagged #${value}` : missing ? `No card called "${value}" yet` : `Open "${value}"`}
+        onPointerDown={stop}
+        onDoubleClick={stop}
+        onClick={(event) => { event.stopPropagation(); if (isTag) actions?.tag(value); else actions?.open(value); }}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" onPointerDown={stop}>
+      {children}
+    </a>
+  );
+}

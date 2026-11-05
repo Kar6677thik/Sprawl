@@ -54,6 +54,11 @@ public sealed class SprawlApiClient(HttpClient http, IOptions<SprawlMcpOptions> 
 
     public Task<List<CardDetail>> Cards(IReadOnlyList<string> ids, CancellationToken ct) => Call<List<CardDetail>>(HttpMethod.Post, "api/v1/cards/query", new CardsQuery(ids), null, ct);
 
+    public Task<CanvasInsights> Insights(string canvasId, CancellationToken ct) => Get<CanvasInsights>($"api/v1/canvases/{Id(canvasId)}/insights", ct);
+
+    public Task<CardContext> Context(string canvasId, string cardId, CancellationToken ct) =>
+        Get<CardContext>($"api/v1/canvases/{Id(canvasId)}/cards/{Id(cardId)}/context", ct);
+
     public Task<List<HistoryEntry>> History(string canvasId, long? before, int limit, CancellationToken ct) =>
         Get<List<HistoryEntry>>($"api/v1/canvases/{Id(canvasId)}/history?{Query(("before", before?.ToString(CultureInfo.InvariantCulture)), ("limit", Num(limit)))}", ct);
 
