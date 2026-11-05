@@ -226,6 +226,8 @@ namespace Sprawl.Mcp
             - One idea per card. Short titles; bodies under ~600 characters unless it is a note or code. Use question cards for gaps you cannot fill.
             - Put cards in a fitting existing region (by title) before inventing new ones. Connect new cards to what they relate to.
             - Never think in coordinates. The server lays everything out and never moves what the owner placed by hand.
+            - A region titled "Inbox" holds the owner's quick captures, waiting to be sorted. get_due_questions lists the open questions the owner is
+              reviewing: the ones they most want answered.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.
             - Batch related additions into one add_to_canvas call, with refs for cross-references and a requestId so a retry is not applied twice.

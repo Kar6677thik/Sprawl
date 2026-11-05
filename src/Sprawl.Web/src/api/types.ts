@@ -211,6 +211,29 @@ export function kindOf(id: string): EntityKind {
   }
 }
 
+export type ReviewGrade = "again" | "hard" | "good" | "easy";
+
+export interface ReviewState {
+  reps: number;
+  ease: number;
+  intervalDays: number;
+  dueAt: string;
+  lastReviewedAt: string | null;
+}
+
+export interface DueQuestion {
+  canvasId: string;
+  canvasTitle: string;
+  card: CardRef;
+  body: string;
+  review: ReviewState;
+}
+
+export interface ReviewQueue {
+  dueCount: number;
+  due: DueQuestion[];
+}
+
 export interface CardRef {
   id: string;
   title: string;

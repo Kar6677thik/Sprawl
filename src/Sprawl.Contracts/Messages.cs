@@ -141,3 +141,25 @@ public sealed record CanvasInsights(
     IReadOnlyList<EdgeRef> Contradictions,
     IReadOnlyList<Hub> Hubs,
     IReadOnlyList<TagCount> Tags);
+
+public static class ReviewGrades
+{
+    /// <summary>Still open and still pressing: back tomorrow.</summary>
+    public const string Again = "again";
+    public const string Hard = "hard";
+    public const string Good = "good";
+    /// <summary>Settled in your head, if not yet on the canvas: wait much longer.</summary>
+    public const string Easy = "easy";
+    public static readonly string[] All = [Again, Hard, Good, Easy];
+}
+
+/// <summary>Where one open question is in its review schedule. Review state lives outside the op log: it is not canvas content.</summary>
+public sealed record ReviewState(int Reps, double Ease, double IntervalDays, DateTimeOffset DueAt, DateTimeOffset? LastReviewedAt);
+
+public sealed record DueQuestion(string CanvasId, string CanvasTitle, CardRef Card, string Body, ReviewState Review);
+
+public sealed record ReviewQueue(int DueCount, IReadOnlyList<DueQuestion> Due);
+
+public sealed record ReviewRequest(string Grade);
+
+public sealed record ReviewResult(string CardId, ReviewState Review);

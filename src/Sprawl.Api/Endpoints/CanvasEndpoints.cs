@@ -112,6 +112,11 @@ public static class CanvasEndpoints
         api.MapGet("/search", (string q, string? canvas, string? kinds, int? limit, CanvasStore store, CancellationToken ct) =>
             store.Search(q, canvas, kinds?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [], limit ?? 20, ct));
 
+        // Open questions due for review. Claude may read the queue (to research them); only the owner grades.
+        api.MapGet("/reviews", (string? canvas, int? limit, ReviewStore reviews, CancellationToken ct) => reviews.Due(canvas, limit ?? 20, ct));
+        api.MapPost("/reviews/{cardId}", (string cardId, ReviewRequest request, ReviewStore reviews, CancellationToken ct) => reviews.Grade(cardId, request.Grade, ct))
+            .RequireAuthorization(SprawlClaims.OwnerPolicy);
+
         api.MapGet("/canvases/{id}/events", Stream).RequireAuthorization(SprawlClaims.OwnerPolicy);
 
         // Owner only: a verified copy now (before an upgrade or a restore drill), in addition to the nightly one.

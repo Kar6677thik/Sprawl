@@ -1,6 +1,6 @@
 # Sprawl feature plan: the best of comparable tools
 
-Written 5 November 2026. **Status: P1 built; P2 built except PNG export; P3–P5 not started.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+Written 5 November 2026. **Status: P1–P3 built (P2 without PNG export); P4–P5 not started.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
 
 ## 1. What the others do best
 
@@ -43,10 +43,13 @@ Left out on purpose: real-time multi-user collaboration (single owner), an in-ap
 - **Present** (`P`): top-level regions in reading order, framed one per step; arrows, Space, Home/End, Esc.
 - **Not yet: PNG export.** It needs a DOM-to-image dependency; deferred until it is wanted.
 
-### P3: Capture and review
+### P3: Capture and review (built)
 
-- An inbox per canvas: quick capture (`Ctrl+Shift+N`, MCP `capture`) lands loose in an *Inbox* region; triage moves cards out.
-- Question review: open questions resurface on a spaced schedule (SM-2) until answered or dismissed. Needs a `reviews` table outside the op log, because review state is not canvas content.
+- **Inbox:** `Shift+I` (or "Capture to Inbox") adds a card to an *Inbox* region, created on first use, and keeps the composer open for the next thought. The MCP prompt `triage_inbox` has Claude sort it into regions with one `reorganize`. No new storage: the inbox is an ordinary region.
+- **Question review** (`R`): open question cards resurface on an SM-2 schedule (`Sprawl.Domain/Review.cs`): first due a day after they are written, then Again 1 day, Good 1, 3, then × ease, Easy longer; ease floor 1.3, interval cap 365 days. Grade with 1-4. The home page shows how many are due per canvas.
+  - The schedule is a `reviews` table outside the op log (migration `0002_reviews.sql`), because review state is not canvas content: undo and revert never touch it, and a deleted card's row stays so an undo brings its schedule back.
+  - `GET /api/v1/reviews?canvas=&limit=` (owner and device) and `POST /api/v1/reviews/{cardId}` `{grade}` (owner only: Claude reads the queue, never grades it).
+  - MCP `get_due_questions` (read) and the `answer_questions` prompt: Claude researches the due questions and adds answers as connected notes, leaving the questions for the owner to settle.
 
 ### P4: Across canvases
 

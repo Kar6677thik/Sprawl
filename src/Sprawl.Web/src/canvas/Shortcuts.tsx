@@ -11,6 +11,8 @@ export const SHORTCUTS: [string, string][] = [
   ["Delete", "Delete the selected cards or connections"],
   ["T", "Tidy the selected region, or the whole canvas"],
   ["Ctrl Z / Ctrl Shift Z", "Undo / redo your last change"],
+  ["Shift I", "Capture to the Inbox (stays open for the next thought)"],
+  ["R", "Review open questions (1-4 to grade)"],
   ["H", "History"],
   ["P", "Present the regions one by one (arrows to move, Esc to stop)"],
   ["F / Shift F", "Focus the selection / fit the canvas"],

@@ -9,6 +9,15 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
   const [query, setQuery] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [due, setDue] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    api.reviews(undefined, 100).then((queue) => {
+      const counts = new Map<string, number>();
+      for (const item of queue.due) counts.set(item.canvasId, (counts.get(item.canvasId) ?? 0) + 1);
+      setDue(counts);
+    }, () => setDue(new Map()));
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -70,6 +79,7 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
                 {canvas.description && <span className="canvas-description">{canvas.description}</span>}
                 <span className="canvas-meta">
                   {canvas.cardCount} cards · {canvas.regionCount} regions{canvas.openQuestions > 0 ? ` · ${canvas.openQuestions} open questions` : ""}
+                  {due.get(canvas.id) ? <span className="due"> · {due.get(canvas.id)} due for review</span> : null}
                   {canvas.tags.length > 0 && <> · {canvas.tags.map((tag) => <span key={tag} className="tag">{tag}</span>)}</>}
                 </span>
               </a>

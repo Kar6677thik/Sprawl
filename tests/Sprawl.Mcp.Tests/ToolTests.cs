@@ -21,6 +21,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["get_history"] = (true, false, true, "canvas.read"),
             ["get_card_context"] = (true, false, true, "canvas.read"),
             ["analyze_canvas"] = (true, false, true, "canvas.read"),
+            ["get_due_questions"] = (true, false, true, "canvas.read"),
             ["create_canvas"] = (false, false, false, "canvas.write"),
             ["add_to_canvas"] = (false, false, false, "canvas.write"),
             ["update_cards"] = (false, true, true, "canvas.write"),
@@ -55,7 +56,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region"], names);
+        Assert.Equal(["answer_questions", "expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region", "triage_inbox"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",
@@ -134,6 +135,8 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         var analysis = Rpc.Data(await Rpc.Call(client, Everyday, "analyze_canvas", new { canvasId }));
         Assert.Equal(3, analysis.GetProperty("cards").GetInt32());
         Assert.Equal(1, analysis.GetProperty("openQuestions").GetArrayLength());
+        var due = Rpc.Data(await Rpc.Call(client, Everyday, "get_due_questions", new { canvasId }));
+        Assert.Equal(0, due.GetProperty("dueCount").GetInt32()); // a question is first due a day after it is written
         Assert.EndsWith("So replicas converge.", full[0].GetProperty("body").GetString());
         Assert.Equal("State-based", full[0].GetProperty("region").GetString());
         Assert.False(full[0].GetProperty("placedByOwner").GetBoolean());

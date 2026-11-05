@@ -63,6 +63,36 @@ public sealed class CanvasPrompts
         5. One add_to_canvas call with refs, expectedVersion and a requestId. Finish with a short list of what you bridged.
         """;
 
+    [McpServerPrompt(Name = "triage_inbox", Title = "Triage the inbox")]
+    [Description("Sort the cards captured in a canvas's Inbox region into the regions where they belong.")]
+    public static string TriageInbox([Description("The canvas id (cv_…) or its title.")] string canvas) =>
+        $"""
+        Triage the Inbox of the Sprawl canvas "{canvas}". The owner captures quick thoughts into a region called "Inbox".
+        1. Call get_canvas with depth=titles for the structure, then get_canvas with region="Inbox" and depth=full.
+        2. For each inbox card decide: move it to the existing region it fits (prefer existing regions; create one only for a cluster of 3+),
+           merge it into an existing card it duplicates, or leave it if it is unclear (say why).
+        3. Tidy titles that are rough notes with update_cards, and connect moved cards to what they relate to.
+        4. Apply with one reorganize call (moveCards, mergeCards, deleteEmptyRegion for the Inbox once empty), passing expectedVersion.
+        Finish with a short list: card → where it went.
+        """;
+
+    [McpServerPrompt(Name = "answer_questions", Title = "Answer open questions")]
+    [Description("Research the owner's open questions that are due for review and add what you find.")]
+    public static string AnswerQuestions([Description("Optional: limit to one canvas (id or title).")] string? canvas = null)
+    {
+        var scope = string.IsNullOrWhiteSpace(canvas) ? "" : " on the Sprawl canvas \"" + canvas + "\"";
+        var filter = string.IsNullOrWhiteSpace(canvas) ? "" : " with that canvasId (use list_canvases to find it)";
+        return $"""
+            Work on the owner's open questions{scope}.
+            1. Call get_due_questions{filter}; take the first 3-5.
+            2. For each, read its context (get_card_context, and get_canvas for its region at depth=full) so you know what is already there.
+            3. Answer what you can: add a note card with the answer in the same region, connected question -leads-to-> answer, citing sources
+               as link cards where you used them. If a question splits into narrower ones, add those as question cards instead.
+            4. Do not change or delete the question cards themselves; the owner decides when a question is settled.
+            Finish with one line per question: answered, partly answered, or still open and why.
+            """;
+    }
+
     [McpServerPrompt(Name = "synthesize_region", Title = "Synthesize a region")]
     [Description("Distil a region into one key summary card, linked to the cards it draws on.")]
     public static string SynthesizeRegion(

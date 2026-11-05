@@ -93,6 +93,31 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Open_questions_come_due_a_day_after_writing_and_grading_reschedules_them()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Review queue", Card("Open", "Why is the sky blue?", "q", CardKinds.Question), Card("Open", "Rayleigh", "n"));
+        var queue = $"/api/v1/reviews?canvas={created.CanvasId}";
+        Assert.Equal(0, (await (await device.GetAsync(queue)).Read<ReviewQueue>()).DueCount);
+
+        factory.Clock.Advance(TimeSpan.FromDays(1.01));
+        var due = await (await device.GetAsync(queue)).Read<ReviewQueue>();
+        var question = Assert.Single(due.Due);
+        Assert.Equal(created.Refs["q"], question.Card.Id);
+        Assert.Equal("Review queue", question.CanvasTitle);
+
+        // Claude reads the queue but never grades it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await device.PostAsJsonAsync($"/api/v1/reviews/{question.Card.Id}", new ReviewRequest("good"), Api.Json)).StatusCode);
+        var owner = await factory.Owner();
+        var graded = await (await owner.PostAsJsonAsync($"/api/v1/reviews/{question.Card.Id}", new ReviewRequest("good"), Api.Json)).Read<ReviewResult>();
+        Assert.Equal((1, 1.0), (graded.Review.Reps, graded.Review.IntervalDays));
+        Assert.Equal(0, (await (await owner.GetAsync(queue)).Read<ReviewQueue>()).DueCount);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"/api/v1/reviews/{created.Refs["n"]}", new ReviewRequest("good"), Api.Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"/api/v1/reviews/{question.Card.Id}", new ReviewRequest("meh"), Api.Json)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

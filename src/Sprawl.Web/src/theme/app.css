@@ -194,3 +194,4 @@ input::placeholder { color: var(--text-faint); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .flow .edge-text-link .react-flow__edge-path { stroke-dasharray: 1 4; stroke-linecap: round; stroke-width: 1.5; opacity: 0.8; }
+.canvas-meta .due { color: var(--accent); }

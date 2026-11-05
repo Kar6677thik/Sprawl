@@ -29,6 +29,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IIdGenerator>(RandomIdGenerator.Instance);
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<CanvasStore>();
+builder.Services.AddSingleton<ReviewStore>();
 builder.Services.AddSingleton<CanvasWriter>();
 builder.Services.AddSingleton<CanvasEventHub>();
 builder.Services.AddSingleton<Listeners>();

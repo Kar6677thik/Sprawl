@@ -12,6 +12,7 @@ import { absolute, LINK_EDGE_PREFIX, toEdges, toLinkEdges, toNodes, type SprawlN
 import { regionAt, relativeTo } from "./geometry";
 import { HistoryPanel } from "./HistoryPanel";
 import { InsightsPanel } from "./InsightsPanel";
+import { ReviewPanel } from "./ReviewPanel";
 import { LinkContext, type LinkActions } from "./parts";
 import { LinkIndex } from "./semantics";
 import { warmTidy } from "./tidy";
@@ -19,6 +20,10 @@ import { nodeTypes, ZoomLevelContext } from "./nodes";
 import { Shortcuts } from "./Shortcuts";
 import type { CanvasController } from "./useCanvas";
 import { LEVEL_ZOOM, levelFor, type ZoomLevel } from "./zoom";
+
+/** Quick captures land here (the server creates the region on first use); Claude's triage_inbox prompt sorts it. */
+const INBOX = "Inbox";
+const CAPTURE = { kind: "card" as const, where: `in ${INBOX}`, region: INBOX, capture: true };
 
 interface Props {
   canvas: CanvasController;
@@ -33,8 +38,8 @@ export function CanvasView(props: Props) {
   );
 }
 
-type Panel = { kind: "card"; id: string } | { kind: "history" } | { kind: "insights" } | null;
-type Composing = (ComposerMode & { region?: string; at?: { x: number; y: number } }) | null;
+type Panel = { kind: "card"; id: string } | { kind: "history" } | { kind: "insights" } | { kind: "review" } | null;
+type Composing = (ComposerMode & { region?: string; at?: { x: number; y: number }; capture?: boolean }) | null;
 
 function Flow({ canvas, initialFocus }: Props) {
   const doc = canvas.doc!;
@@ -174,7 +179,9 @@ function Flow({ canvas, initialFocus }: Props) {
       ...(target.at ? { at: target.at } : {}),
     }], []);
     const id = result?.refs["new"];
-    if (id) setPanel({ kind: "card", id });
+    // Capture keeps the composer open for the next thought; a normal quick-add opens the new card.
+    if (target.capture) { if (id) canvas.say(`Captured to ${INBOX}.`, { focus: id }); setComposing({ ...target }); }
+    else if (id) setPanel({ kind: "card", id });
   }, [canvas, composing]);
 
   const createRegion = useCallback(async (title: string) => {
@@ -244,6 +251,8 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "undo", group: "Actions", label: "Undo", keys: "Ctrl Z", run: () => void canvas.undo() },
     { id: "redo", group: "Actions", label: "Redo", keys: "Ctrl ⇧Z", run: () => void canvas.redo() },
     { id: "history", group: "Actions", label: "History", keys: "H", run: () => setPanel({ kind: "history" }) },
+    { id: "capture", group: "Actions", label: "Capture to Inbox", hint: "quick thoughts, sort later", keys: "⇧I", run: () => setComposing(CAPTURE) },
+    { id: "review", group: "Actions", label: "Review open questions", keys: "R", run: () => setPanel({ kind: "review" }) },
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -283,6 +292,8 @@ function Flow({ canvas, initialFocus }: Props) {
         case "/": event.preventDefault(); openPalette("canvas"); return;
         case "#": event.preventDefault(); openPalette("canvas", "#"); return;
         case "p": present(0); return;
+        case "I": event.preventDefault(); setComposing(CAPTURE); return;
+        case "r": setPanel((p) => (p?.kind === "review" ? null : { kind: "review" })); return;
         case "i": setPanel((p) => (p?.kind === "insights" ? null : { kind: "insights" })); return;
         case "?": setShortcuts(true); return;
         case "N": event.preventDefault(); setComposing({ kind: "region" }); return;
@@ -358,6 +369,11 @@ function Flow({ canvas, initialFocus }: Props) {
           </div>
         )}
         {panel?.kind === "card" && <CardPanel doc={doc} cardId={panel.id} write={canvas.write} onClose={() => setPanel(null)} onFocus={openOrFocus} onTag={showTag} />}
+        {panel?.kind === "review" && (
+          <ReviewPanel canvasId={doc.meta.id} onOpen={openCard} onClose={() => setPanel(null)}
+            onAsk={() => void navigator.clipboard.writeText(`Use the Sprawl answer_questions prompt for canvas ${doc.meta.id}: research the open questions due for review and add what you find.`)
+              .then(() => canvas.say("Prompt copied: paste it into Claude."), () => canvas.say("Could not copy to the clipboard."))} />
+        )}
         {panel?.kind === "insights" && (
           <InsightsPanel canvasId={doc.meta.id} version={doc.version} write={canvas.write} onFocus={focus} onTag={showTag} say={(text) => canvas.say(text)} onClose={() => setPanel(null)} />
         )}

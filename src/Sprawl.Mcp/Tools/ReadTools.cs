@@ -118,6 +118,18 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
         CancellationToken token = default) =>
         executor.Run("analyze_canvas", () => api.Insights(canvasId, token), token);
 
+    [McpServerTool(Name = "get_due_questions", Title = "Open questions due for review", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
+    [Authorize(Policy = "scope:canvas.read")]
+    [Description("The owner's open question cards that are due for spaced review, across canvases (or one), oldest due first. " +
+        "These are the questions the owner is actively thinking about: good candidates to research and answer. To answer one, add a note with the answer " +
+        "and connect it to the question (leads-to), or update the question card; the owner grades reviews in the UI.")]
+    public Task<McpResult<ReviewQueue>> GetDueQuestions(
+        [Description("Only this canvas (cv_…).")] string? canvasId = null,
+        [Description("1-100, default 20.")] int limit = 20,
+        CancellationToken token = default) =>
+        executor.Run("get_due_questions", () => api.Reviews(canvasId, Math.Clamp(limit, 1, 100), token), token);
+
     [McpServerTool(Name = "get_history", Title = "Read canvas history", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
     [Authorize(Policy = "scope:canvas.read")]
