@@ -87,6 +87,35 @@ public sealed record Sketch(
     string CreatedBy,
     DateTimeOffset CreatedAt) : IEntity;
 
+/// <summary>One step of a walkthrough: what to say, and which cards, regions or connections to light up while saying it.</summary>
+public sealed record WalkthroughStep(string Text, IReadOnlyList<string>? Highlight = null)
+{
+    public bool Equals(WalkthroughStep? other) =>
+        other is not null && Text == other.Text && (Highlight ?? []).SequenceEqual(other.Highlight ?? [], StringComparer.Ordinal);
+
+    public override int GetHashCode() => HashCode.Combine(Text, Highlight?.Count ?? 0);
+}
+
+/// <summary>
+/// A guided tour of a region: ordered steps of explanation, each highlighting what it talks about while the rest fades.
+/// How a diagram becomes an explanation (Ilograph's walkthroughs, IcePanel's flows, Structurizr's dynamic views).
+/// </summary>
+public sealed record Walkthrough(
+    string Id,
+    string RegionId,
+    string Title,
+    IReadOnlyList<WalkthroughStep> Steps,
+    string CreatedBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt) : IEntity
+{
+    public bool Equals(Walkthrough? other) =>
+        other is not null && Id == other.Id && RegionId == other.RegionId && Title == other.Title && Steps.SequenceEqual(other.Steps)
+        && CreatedBy == other.CreatedBy && CreatedAt == other.CreatedAt && UpdatedAt == other.UpdatedAt;
+
+    public override int GetHashCode() => HashCode.Combine(Id, RegionId, Title, Steps.Count);
+}
+
 /// <summary>An edge between two cards, a card and a region, or two regions. The endpoint type is in the ID prefix.</summary>
 public sealed record Connection(
     string Id,

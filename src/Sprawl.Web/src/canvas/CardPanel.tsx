@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Ends, Intent, LineStyle } from "../api/types";
 import { SHAPES, ShapeIcon } from "./shapes";
+import { MermaidView } from "./MermaidView";
 import { CardLinks } from "./CardLinks";
 import { Body, KindGlyph } from "./parts";
 
-const KINDS: CardKind[] = ["idea", "note", "question", "link", "code"];
+const KINDS: CardKind[] = ["idea", "note", "question", "link", "code", "mermaid"];
 const CONNECTION_KINDS: ConnectionKind[] = ["relates", "leads-to", "contradicts", "example-of", "depends-on"];
 const LINES: LineStyle[] = ["solid", "dashed", "dotted", "thick"];
 const ENDS: [Ends, string][] = [["end", "→"], ["start", "←"], ["both", "↔"], ["none", "—"]];
@@ -95,16 +96,16 @@ function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "
           <input value={url} placeholder="https://…" onFocus={() => { focused.current = "url"; }} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} />
         </label>}
         <div className="field">
-          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : "Notes"} <em>(markdown · [[Card]] links · #tags)</em></span>
+          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : card.kind === "mermaid" ? "Mermaid source" : "Notes"} {card.kind !== "mermaid" && <em>(markdown · [[Card]] links · #tags)</em>}</span>
           {editingBody || card.body.length === 0 ? (
             <textarea
-              className={card.kind === "code" ? "is-code" : ""} rows={10} value={body} autoFocus={editingBody} aria-label="Body"
+              className={card.kind === "code" || card.kind === "mermaid" ? "is-code" : ""} rows={card.kind === "mermaid" ? 16 : 10} value={body} autoFocus={editingBody} aria-label="Body"
               onFocus={() => { focused.current = "body"; setEditingBody(true); }} onChange={(e) => setBody(e.target.value)} onBlur={saveBody}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) e.currentTarget.blur(); if (e.key === "Escape") { setBody(card.body); e.currentTarget.blur(); } }}
             />
           ) : (
             <div className="panel-preview" role="button" tabIndex={0} onClick={() => setEditingBody(true)} onKeyDown={(e) => { if (e.key === "Enter") setEditingBody(true); }} title="Click to edit">
-              {card.kind === "code" ? <pre className="card-code"><code>{card.body}</code></pre> : <Body markdown={card.body} />}
+              {card.kind === "code" ? <pre className="card-code"><code>{card.body}</code></pre> : card.kind === "mermaid" ? <div className="panel-mermaid"><MermaidView source={card.body} /></div> : <Body markdown={card.body} />}
             </div>
           )}
         </div>

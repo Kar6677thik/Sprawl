@@ -206,6 +206,16 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
         Assert.Equal(LineStyles.Dashed, past.Connections.Single(c => c.Label == "async").Line);
         var outline = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/outline")).Content.ReadAsStringAsync();
         Assert.Contains("[hexagon] API", outline);
+
+        // Walkthroughs persist, come back in the document, and replay with history.
+        var walked = await (await device.PostAsJsonAsync($"/api/v1/canvases/{created.CanvasId}/batches",
+            new BatchRequest([new AddWalkthroughIntent("Payments", "Follow a payment", [new("The web app calls the API.", ["Web app", "API"]), new("The API writes to the ledger.", ["Ledger"])])]), Api.Json)).Read<BatchResult>();
+        var withTour = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}")).Read<CanvasDocument>();
+        var tour = Assert.Single(withTour.Walkthroughs!);
+        Assert.Equal(region.Id, tour.RegionId);
+        Assert.Equal([result.Refs["p:web"], result.Refs["p:api"]], tour.Steps[0].Highlight);
+        Assert.Empty((await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/state?version={result.Version}")).Read<CanvasDocument>()).Walkthroughs!);
+        Assert.Single((await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/state?version={walked.Version}")).Read<CanvasDocument>()).Walkthroughs!);
     }
 
     [Fact]

@@ -95,6 +95,15 @@ public static class OutlineRenderer
                 .Append(sketches == 0 ? "" : sketches == 1 ? ", 1 sketch by the owner" : $", {sketches} sketches by the owner")
                 .Append(region.Layout switch { RegionLayouts.FlowDown => ", diagram, flows down", RegionLayouts.FlowRight => ", diagram, flows right", _ => "" }).Append(")\n");
             if (depth != OutlineDepths.Regions) WriteCards(cards, region.Id);
+            foreach (var walkthrough in state.Walkthroughs.Values.Where(w => w.RegionId == region.Id).OrderBy(w => w.CreatedAt).ThenBy(w => w.Id, StringComparer.Ordinal))
+            {
+                output.Append("~ walkthrough ").Append(walkthrough.Id).Append(' ').Append(walkthrough.Title).Append(" (").Append(walkthrough.Steps.Count)
+                    .Append(walkthrough.Steps.Count == 1 ? " step)" : " steps)").Append('\n');
+                if (depth != OutlineDepths.Full) continue;
+                foreach (var (step, i) in walkthrough.Steps.Select((s, i) => (s, i + 1)))
+                    output.Append("  ").Append(i).Append(". ").Append(OneLine(step.Text))
+                        .Append((step.Highlight ?? []).Count == 0 ? "" : " [" + string.Join(", ", step.Highlight!) + "]").Append('\n');
+            }
         }
 
         void WriteCards(IEnumerable<Card> cards, string regionKey)
@@ -138,6 +147,7 @@ public static class OutlineRenderer
         CardKinds.Note => "note",
         CardKinds.Link => "link",
         CardKinds.Code => "code",
+        CardKinds.Mermaid => "mermaid",
         _ => kind
     };
 

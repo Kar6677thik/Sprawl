@@ -62,7 +62,8 @@ public sealed record CanvasDocument(
     IReadOnlyList<Card> Cards,
     IReadOnlyList<Connection> Connections,
     IReadOnlyList<LayoutWarning> LayoutWarnings,
-    IReadOnlyList<Sketch>? Sketches = null);
+    IReadOnlyList<Sketch>? Sketches = null,
+    IReadOnlyList<Walkthrough>? Walkthroughs = null);
 
 public sealed record HistoryEntry(
     long Version,
@@ -175,3 +176,6 @@ public sealed record ReviewQueue(int DueCount, IReadOnlyList<DueQuestion> Due, I
 public sealed record ReviewRequest(string Grade);
 
 public sealed record ReviewResult(string CardId, ReviewState Review);
+
+/// <summary>A region ready to show anywhere: its drawing (SVG), its Mermaid source and its walkthroughs.</summary>
+public sealed record RegionView(string CanvasId, string CanvasTitle, long Version, string RegionId, string Title, string? Layout, string Svg, string Mermaid, IReadOnlyList<Walkthrough> Walkthroughs);

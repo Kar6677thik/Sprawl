@@ -21,7 +21,9 @@ import type { Stroke } from "./ink";
 import { LinkContext, type LinkActions } from "./parts";
 import { LinkIndex, mayBeExternal } from "./semantics";
 import { warmTidy } from "./tidy";
-import { nodeTypes, ZoomLevelContext } from "./nodes";
+import { nodeTypes, WalkthroughContext, ZoomLevelContext } from "./nodes";
+import { WalkthroughPlayer } from "./WalkthroughPlayer";
+import { litFor, walkthroughsOf } from "./walkthrough";
 import { Shortcuts } from "./Shortcuts";
 import type { CanvasController } from "./useCanvas";
 import { LEVEL_ZOOM, levelFor, type ZoomLevel } from "./zoom";
@@ -72,6 +74,7 @@ function Flow({ canvas, initialFocus }: Props) {
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
   const [presenting, setPresenting] = useState<number | null>(null);
+  const [walking, setWalking] = useState<{ id: string; step: number } | null>(null);
   const [ink, setInk] = useState<{ tint: InkTint; width: number } | null>(null);
   const [mermaidDraft, setMermaidDraft] = useState<(MermaidDraft & { near?: string }) | null>(null);
   const dragging = useRef(false);
@@ -99,7 +102,16 @@ function Flow({ canvas, initialFocus }: Props) {
     const both = members.has(link.source) && members.has(link.target);
     void canvas.write([{ type: "connect", from: link.source, to: link.target, kind: both ? "leads-to" : "relates" }], [link.source, link.target]);
   }, [canvas, members, replaying]);
-  const onNodesChange = useCallback((changes: NodeChange<SprawlNode>[]) => setNodes((current) => applyNodeChanges(changes, current)), []);
+  const onNodesChange = useCallback((changes: NodeChange<SprawlNode>[]) => {
+    setNodes((current) => applyNodeChanges(changes, current));
+    const resized = changes.filter((c): c is Extract<NodeChange<SprawlNode>, { type: "dimensions" }> => c.type === "dimensions" && c.resizing === false && !!c.dimensions);
+    if (resized.length === 0 || replaying) return;
+    const items = resized.map((c) => {
+      const node = flow.getNode(c.id);
+      return { id: c.id, x: Math.round(node?.position.x ?? 0), y: Math.round(node?.position.y ?? 0), w: Math.round(c.dimensions!.width), h: Math.round(c.dimensions!.height) };
+    });
+    void canvas.move(items);
+  }, [canvas, flow, replaying]);
 
   /** Centre an item at reading zoom (works from the zoomed-out map, where cards are not nodes). */
   const focus = useCallback((id: string) => {
@@ -261,6 +273,52 @@ function Flow({ canvas, initialFocus }: Props) {
     }], []);
   }, [canvas, doc, ink]);
 
+  // ---- Walkthroughs ------------------------------------------------------------------------------------------
+  const walkthroughs = useMemo(() => walkthroughsOf(doc), [doc]);
+  const walkRegions = useMemo(() => new Set(walkthroughs.map((w) => w.regionId)), [walkthroughs]);
+  const active = walking ? walkthroughs.find((w) => w.id === walking.id) ?? null : null;
+  const lit = useMemo(() => active && walking ? litFor(doc, active.steps[walking.step]?.highlight ?? []) : null, [active, doc, walking]);
+  const shownNodes = useMemo(() => !lit ? nodes : nodes.map((node) => {
+    if (node.type === "region") return lit.nodes.has(node.id) ? { ...node, className: `${node.className ?? ""} is-lit` } : node;
+    return { ...node, className: `${node.className ?? ""} ${lit.nodes.has(node.id) ? "is-lit" : "is-dim"}` };
+  }), [lit, nodes]);
+  const shownEdges = useMemo(() => !lit ? edges : edges.map((edge) => lit.edges.has(edge.id)
+    ? { ...edge, animated: true, className: `${edge.className ?? ""} is-lit` }
+    : { ...edge, className: `${edge.className ?? ""} is-dim` }), [edges, lit]);
+
+  /** Frame what the step lights up (or the whole region when it lights nothing). */
+  const frameStep = useCallback((walkthroughId: string, step: number) => {
+    const w = walkthroughs.find((x) => x.id === walkthroughId);
+    if (!w) return;
+    const ids = [...litFor(doc, w.steps[step]?.highlight ?? []).nodes].filter((id) => !id.startsWith("rg_") || (w.steps[step]?.highlight ?? []).includes(id));
+    const rects = (ids.length > 0 ? ids : [w.regionId]).map((id) => absolute(doc, id)).filter((r): r is NonNullable<typeof r> => !!r);
+    if (rects.length === 0) return;
+    const x = Math.min(...rects.map((r) => r.x)), y = Math.min(...rects.map((r) => r.y));
+    const right = Math.max(...rects.map((r) => r.x + r.w)), bottom = Math.max(...rects.map((r) => r.y + r.h));
+    // Fit the step with room around it and above the caption card, never closer than a comfortable reading zoom.
+    const pane = document.querySelector<HTMLElement>(".flow .react-flow");
+    const viewW = pane?.clientWidth ?? window.innerWidth, viewH = (pane?.clientHeight ?? window.innerHeight) - 220;
+    const zoom = Math.max(0.2, Math.min(1, viewW / (right - x + 240), viewH / (bottom - y + 160)));
+    void flow.setCenter((x + right) / 2, (y + bottom) / 2 + 110 / zoom, { zoom, duration: 550 });
+  }, [doc, flow, walkthroughs]);
+
+  const walk = useCallback((id: string | null, step = 0) => {
+    if (!id) { setWalking(null); return; }
+    const w = walkthroughs.find((x) => x.id === id);
+    if (!w || w.steps.length === 0) return;
+    const clamped = Math.max(0, Math.min(step, w.steps.length - 1));
+    setPanel(null);
+    setPresenting(null);
+    setWalking({ id, step: clamped });
+    frameStep(id, clamped);
+  }, [frameStep, walkthroughs]);
+
+  const playRegion = useCallback((regionId: string) => {
+    const first = walkthroughs.find((w) => w.regionId === regionId);
+    if (first) walk(first.id);
+  }, [walk, walkthroughs]);
+  const walkContext = useMemo(() => ({ regions: walkRegions, play: playRegion }), [playRegion, walkRegions]);
+
   /** Present: top-level regions in reading order, one per step, framed to fill the screen. */
   const steps = useMemo(() => doc.regions.filter((r) => r.parentId === null).sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id)), [doc.regions]);
   const present = useCallback((index: number | null) => {
@@ -395,9 +453,19 @@ function Flow({ canvas, initialFocus }: Props) {
       if (!region) { canvas.say("Select a region first."); return; }
       void api.mermaid(doc.meta.id, region.id).then((text) => navigator.clipboard.writeText(text)).then(() => canvas.say("Copied as Mermaid."), () => canvas.say("Could not copy."));
     } },
+    { id: "diagram-svg", group: "Diagrams", label: "Export selected region as SVG", hint: "drawn by the server", run: () => {
+      const region = selectedRegion();
+      if (!region) { canvas.say("Select a region first."); return; }
+      const link = document.createElement("a");
+      link.href = `/api/v1/canvases/${encodeURIComponent(doc.meta.id)}/regions/${encodeURIComponent(region.id)}/svg`;
+      link.download = `${region.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") || "diagram"}.svg`;
+      link.click();
+    } },
     { id: "layout-down", group: "Diagrams", label: "Make selected region a diagram (flows down)", run: () => setLayout("flow-down") },
     { id: "layout-right", group: "Diagrams", label: "Make selected region a diagram (flows right)", run: () => setLayout("flow-right") },
     { id: "layout-cards", group: "Diagrams", label: "Turn selected diagram back into cards", run: () => setLayout("cards") },
+    ...walkthroughs.map((w) => ({ id: `walk:${w.id}`, group: "Walkthroughs", label: `Play: ${w.title}`, hint: `${doc.regions.find((r) => r.id === w.regionId)?.title ?? ""} · ${w.steps.length} steps`, run: () => walk(w.id) })),
+    ...walkthroughs.map((w) => ({ id: `walk-delete:${w.id}`, group: "Walkthroughs", label: `Delete walkthrough: ${w.title}`, run: () => void canvas.write([{ type: "deleteWalkthrough", id: w.id }], [w.id]) })),
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -409,13 +477,25 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, doc.meta.id, download, editMermaid, exportPng, flow, openPalette, present, saved, selectedRegion, setLayout, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, doc.regions, walk, walkthroughs, download, editMermaid, exportPng, flow, openPalette, present, saved, selectedRegion, setLayout, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key;
       if (replaying) return; // Replay owns the keyboard; nothing may edit a past state.
+      if (walking && active && !mod) {
+        const moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, Enter: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
+        if (key === "Escape") { event.preventDefault(); walk(null); return; }
+        if (key === "Home") { event.preventDefault(); walk(active.id, 0); return; }
+        if (key === "End") { event.preventDefault(); walk(active.id, active.steps.length - 1); return; }
+        if (moves[key] !== undefined) {
+          event.preventDefault();
+          const next = walking.step + moves[key]!;
+          if (next >= active.steps.length) walk(null); else walk(active.id, next);
+          return;
+        }
+      }
       if (ink && !mod) {
         // Draw mode: Esc or D leaves, 1-6 pick a colour, [ and ] change the line; Ctrl+Z still undoes a stroke.
         const typingHere = event.target instanceof Element && event.target.closest("input, textarea, select") !== null;
@@ -449,6 +529,12 @@ function Flow({ canvas, initialFocus }: Props) {
         case "/": event.preventDefault(); openPalette("canvas"); return;
         case "#": event.preventDefault(); openPalette("canvas", "#"); return;
         case "p": present(0); return;
+        case "w": {
+          const region = selectedRegion();
+          const target = (region && walkthroughs.find((w) => w.regionId === region.id || w.regionId === region.parentId)) ?? walkthroughs[0];
+          if (target) walk(target.id); else canvas.say("No walkthroughs on this canvas yet. Ask Claude for one, or add one with add_walkthrough.");
+          return;
+        }
         case "m": event.preventDefault(); { const near = selectedRegion(); setMermaidDraft({ title: "", mermaid: "", replace: false, ...(near && !near.parentId ? { near: near.id } : {}) }); } return;
         case "d": setInk({ tint: null, width: 2 }); return;
         case "I": event.preventDefault(); setComposing(CAPTURE); return;
@@ -470,17 +556,18 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, mermaidDraft, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selectedRegion, selection, shortcuts, startCard, steps.length, tidySelection]);
+  }, [canvas, composing, mermaidDraft, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selectedRegion, selection, walking, active, walk, walkthroughs, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
   return (
     <ZoomLevelContext.Provider value={level}>
       <LinkContext.Provider value={linkActions}>
-      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <WalkthroughContext.Provider value={walkContext}>
+      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}${walking ? " is-walking" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={shownNodes}
+          edges={shownEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
@@ -525,6 +612,10 @@ function Flow({ canvas, initialFocus }: Props) {
           <Replay canvasId={canvas.doc.meta.id} latest={canvas.doc.version} onState={setPastDoc}
             onRestore={(v) => { setReplaying(false); void canvas.revertTo(v); }} onExit={() => setReplaying(false)} />
         )}
+        {active && walking && (
+          <WalkthroughPlayer walkthrough={active} step={walking.step} regionTitle={doc.regions.find((r) => r.id === active.regionId)?.title ?? ""}
+            onStep={(s) => walk(active.id, s)} onExit={() => walk(null)} />
+        )}
         {presenting !== null && steps[presenting] && (
           <div className="presenter" role="status" aria-live="polite">
             <button type="button" className="icon-button" aria-label="Previous region" disabled={presenting === 0} onClick={() => present(presenting - 1)}>‹</button>
@@ -568,6 +659,7 @@ function Flow({ canvas, initialFocus }: Props) {
       )}
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
       {mermaidDraft && <MermaidDialog initial={mermaidDraft} onClose={() => setMermaidDraft(null)} onSubmit={(draft) => void drawMermaid({ ...draft, ...(mermaidDraft.near ? { near: mermaidDraft.near } : {}) })} />}
+      </WalkthroughContext.Provider>
       </LinkContext.Provider>
     </ZoomLevelContext.Provider>
   );

@@ -169,6 +169,7 @@ public static class Rpc
         request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", "2026-07-28");
         request.Headers.TryAddWithoutValidation("Mcp-Method", method);
         if (parameters.TryGetValue("name", out var name) && name is string toolName) request.Headers.TryAddWithoutValidation("Mcp-Name", toolName);
+        else if (parameters.TryGetValue("uri", out var uri) && uri is string resourceUri) request.Headers.TryAddWithoutValidation("Mcp-Name", resourceUri);
         request.Headers.Accept.ParseAdd("application/json");
         request.Headers.Accept.ParseAdd("text/event-stream");
         var response = await client.SendAsync(request);

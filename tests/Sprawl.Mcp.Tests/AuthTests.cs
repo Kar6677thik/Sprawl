@@ -6,11 +6,11 @@ namespace Sprawl.Mcp.Tests;
 
 public sealed class AuthTests(McpHost host) : IClassFixture<McpHost>
 {
-    private static readonly string[] ReadTools = ["analyze_canvas", "get_canvas", "get_card_context", "get_cards", "get_diagram", "get_due_questions", "get_history", "list_canvases", "search"];
+    private static readonly string[] ReadTools = ["analyze_canvas", "get_canvas", "get_card_context", "get_cards", "get_diagram", "get_due_questions", "get_history", "list_canvases", "search", "show_diagram"];
     private static readonly string[] AllTools =
     [
-        "add_diagram", "add_to_canvas", "analyze_canvas", "connect", "create_canvas", "delete_canvas", "delete_cards", "disconnect", "get_canvas", "get_card_context", "get_cards",
-        "get_diagram", "get_due_questions", "get_history", "list_canvases", "reorganize", "revert_canvas", "search", "update_canvas", "update_cards", "update_connections"
+        "add_diagram", "add_to_canvas", "add_walkthrough", "analyze_canvas", "connect", "create_canvas", "delete_canvas", "delete_cards", "disconnect", "get_canvas", "get_card_context", "get_cards",
+        "get_diagram", "get_due_questions", "get_history", "list_canvases", "reorganize", "revert_canvas", "search", "show_diagram", "update_canvas", "update_cards", "update_connections"
     ];
 
     [Fact]

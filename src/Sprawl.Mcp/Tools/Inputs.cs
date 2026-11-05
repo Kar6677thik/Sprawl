@@ -12,6 +12,7 @@ public enum CardKind
     [JsonStringEnumMemberName("question")] Question,
     [JsonStringEnumMemberName("link")] Link,
     [JsonStringEnumMemberName("code")] Code,
+    [JsonStringEnumMemberName("mermaid")] Mermaid,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ConnectionKind>))]
@@ -118,6 +119,7 @@ public enum ReorganizeType
     [JsonStringEnumMemberName("mergeCards")] MergeCards,
     [JsonStringEnumMemberName("deleteEmptyRegion")] DeleteEmptyRegion,
     [JsonStringEnumMemberName("setLayout")] SetLayout,
+    [JsonStringEnumMemberName("deleteWalkthrough")] DeleteWalkthrough,
 }
 
 public sealed record RegionInput(
@@ -129,7 +131,7 @@ public sealed record RegionInput(
 
 public sealed record CardInput(
     [property: Description("Region for the card: a ref from this call, a region id, or a region title. A new title creates the region.")] string Region,
-    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet.")] CardKind Kind,
+    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet; mermaid: a rendered Mermaid diagram of any type (the body is the source; add_diagram is usually simpler).")] CardKind Kind,
     [property: Description("Card title, 1-120 characters. One idea per card.")] string Title,
     [property: Description("Markdown body. Keep it short (under ~600 characters) except for notes and code. Max 8000 (16000 for code).")] string? Body = null,
     [property: Description("Optional temporary id for this call (e.g. \"c1\"), for connections to cards created in the same call.")] string? Ref = null,
@@ -166,10 +168,14 @@ public sealed record ConnectionUpdate(
     LineStyle? Line = null,
     Arrowheads? Ends = null);
 
+public sealed record StepInput(
+    [property: Description("What to say at this step: one idea, 1-3 sentences of markdown (at most 2000 characters). Say what happens and why, not what is on screen.")] string Text,
+    [property: Description("What to light up while saying it (everything else fades): card titles, sub-region titles, ids (cd_…, rg_…, cx_…), or, in add_diagram, the Mermaid node ids. Connections between two lit items light up and animate by themselves.")] IReadOnlyList<string>? Highlight = null);
+
 public sealed record ConnectionPair(string From, string To, ConnectionKind? Kind = null);
 
 public sealed record ReorganizeAction(
-    [property: Description("moveCards {cardIds, toRegion, createIfMissing}; createRegion {title, ref?, parent?, layout?}; renameRegion {regionId, title}; nestRegion {regionId, parentId (omit to make top-level)}; mergeRegions {sourceIds, intoId}; mergeCards {cardIds, intoId, title?, body?}; deleteEmptyRegion {regionId}; setLayout {regionId, layout} turns a region into a diagram (flow-down / flow-right) or back into cards.")]
+    [property: Description("moveCards {cardIds, toRegion, createIfMissing}; createRegion {title, ref?, parent?, layout?}; renameRegion {regionId, title}; nestRegion {regionId, parentId (omit to make top-level)}; mergeRegions {sourceIds, intoId}; mergeCards {cardIds, intoId, title?, body?}; deleteEmptyRegion {regionId}; setLayout {regionId, layout} turns a region into a diagram (flow-down / flow-right) or back into cards; deleteWalkthrough {intoId: the walkthrough id wt_…}.")]
     ReorganizeType Type,
     IReadOnlyList<string>? CardIds = null,
     [property: Description("Target region: ref, id or title.")] string? ToRegion = null,
@@ -192,6 +198,7 @@ internal static class Map
         CardKind.Note => CardKinds.Note,
         CardKind.Question => CardKinds.Question,
         CardKind.Link => CardKinds.Link,
+        CardKind.Mermaid => CardKinds.Mermaid,
         _ => CardKinds.Code
     };
 
@@ -230,6 +237,7 @@ internal static class Map
     {
         ReorganizeType.MoveCards => new MoveCardsIntent(Need(a.CardIds, "cardIds"), Need(a.ToRegion, "toRegion"), a.CreateIfMissing),
         ReorganizeType.CreateRegion => new AddRegionIntent(Need(a.Title, "title"), a.Ref, a.Parent, Layout: Layout(a.Layout)),
+        ReorganizeType.DeleteWalkthrough => new DeleteWalkthroughIntent(Need(a.IntoId, "intoId")),
         ReorganizeType.SetLayout => new UpdateRegionIntent(Need(a.RegionId, "regionId"), Layout: Layout(a.Layout) ?? throw new ArgumentException("setLayout needs layout.")),
         ReorganizeType.RenameRegion => new UpdateRegionIntent(Need(a.RegionId, "regionId"), Need(a.Title, "title")),
         ReorganizeType.NestRegion => new NestRegionIntent(Need(a.RegionId, "regionId"), a.ParentId),

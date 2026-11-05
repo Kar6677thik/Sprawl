@@ -74,7 +74,8 @@ public sealed partial class CanvasStore(Database database)
         [.. state.Cards.Values.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal)],
         [.. state.Connections.Values.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal)],
         LayoutEngine.FindOverlaps(state),
-        [.. state.Sketches.Values.OrderBy(s => s.CreatedAt).ThenBy(s => s.Id, StringComparer.Ordinal)]);
+        [.. state.Sketches.Values.OrderBy(s => s.CreatedAt).ThenBy(s => s.Id, StringComparer.Ordinal)],
+        [.. state.Walkthroughs.Values.OrderBy(w => w.CreatedAt).ThenBy(w => w.Id, StringComparer.Ordinal)]);
 
     public async Task<(long Version, string Text)> Outline(string id, OutlineOptions options, CancellationToken cancellationToken)
     {

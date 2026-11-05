@@ -27,6 +27,8 @@ namespace Sprawl.Contracts;
 [JsonDerivedType(typeof(DeleteSketchesIntent), "deleteSketches")]
 [JsonDerivedType(typeof(UpdateConnectionIntent), "updateConnection")]
 [JsonDerivedType(typeof(AddDiagramIntent), "addDiagram")]
+[JsonDerivedType(typeof(AddWalkthroughIntent), "addWalkthrough")]
+[JsonDerivedType(typeof(DeleteWalkthroughIntent), "deleteWalkthrough")]
 public abstract record Intent;
 
 /// <param name="Near">A region (ID or title) to place the new region next to.</param>
@@ -114,6 +116,14 @@ public sealed record UnpinIntent(IReadOnlyList<string> Ids) : Intent;
 /// <summary>Owner only: a freehand stroke. X/Y place its box: relative to <paramref name="Region"/>, or canvas-absolute when none.</summary>
 /// <param name="Path">SVG path data in the box's own coordinates (0..W, 0..H).</param>
 public sealed record AddSketchIntent(string Path, double X, double Y, int W, int H, string? Region = null, string? Tint = null, int? Stroke = null, string? Ref = null) : Intent;
+
+/// <summary>
+/// A walkthrough of a region. Each step's highlight names cards, sub-regions or connections by ref, id or title (titles are
+/// looked up inside the region). With <paramref name="Replace"/>, a walkthrough of the same title in the region is rewritten.
+/// </summary>
+public sealed record AddWalkthroughIntent(string Region, string Title, IReadOnlyList<WalkthroughStep> Steps, string? Ref = null, bool Replace = false) : Intent;
+
+public sealed record DeleteWalkthroughIntent(string Id) : Intent;
 
 /// <summary>Owner only.</summary>
 public sealed record DeleteSketchesIntent(IReadOnlyList<string> Ids) : Intent;

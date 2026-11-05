@@ -62,6 +62,9 @@ public static class Summaries
         Add(parts, Count("sketch.create"), "+", "sketch");
         Add(parts, Count("sketch.update"), "moved ", "sketch");
         Add(parts, Count("sketch.delete"), "-", "sketch");
+        Add(parts, Count("walkthrough.create"), "+", "walkthrough");
+        Add(parts, Count("walkthrough.update"), "edited ", "walkthrough");
+        Add(parts, Count("walkthrough.delete"), "-", "walkthrough");
         if (kind == BatchKinds.Tidy) return $"Tidied {Plural(ops.Count, "item")}";
         if (parts.Count == 0) parts.Add($"layout ({Plural(ops.Count, "item")})");
         return string.Join(", ", parts);

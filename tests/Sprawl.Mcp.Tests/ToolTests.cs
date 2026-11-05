@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 
 namespace Sprawl.Mcp.Tests;
@@ -23,7 +24,9 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["analyze_canvas"] = (true, false, true, "canvas.read"),
             ["get_due_questions"] = (true, false, true, "canvas.read"),
             ["get_diagram"] = (true, false, true, "canvas.read"),
+            ["show_diagram"] = (true, false, true, "canvas.read"),
             ["add_diagram"] = (false, false, false, "canvas.write"),
+            ["add_walkthrough"] = (false, false, false, "canvas.write"),
             ["update_connections"] = (false, false, true, "canvas.write"),
             ["create_canvas"] = (false, false, false, "canvas.write"),
             ["add_to_canvas"] = (false, false, false, "canvas.write"),
@@ -50,7 +53,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         }
         // Coordinates are never part of any input schema: Claude cannot place things by position.
         Assert.DoesNotContain("\"x\"", body.ToString());
-        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\"]", body.ToString().Replace(" ", ""));
+        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\",\"mermaid\"]", body.ToString().Replace(" ", ""));
         Assert.Contains("get_canvas", tools["add_to_canvas"].GetProperty("description").GetString());
     }
 
@@ -206,21 +209,45 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             canvasId,
             title = "Produce path",
             mermaid = "flowchart LR\n  prod((Producer)) --> broker{{Broker}}\n  broker ==>|append| log[(Partition log)]\n  broker -.->|ack| prod",
-            near = "Concepts"
+            near = "Concepts",
+            walkthrough = new object[]
+            {
+                new { text = "A producer sends records to the broker.", highlight = new[] { "prod", "broker" } },
+                new { text = "The broker appends them to the partition log.", highlight = new[] { "Broker", "log" } },
+                new { text = "And acknowledges, asynchronously.", highlight = new[] { "broker", "prod" } },
+            }
         }));
         var broker = drawn.GetProperty("refs").GetProperty("d:broker").GetString()!;
         Assert.StartsWith("cd_", broker);
 
-        // Shapes and the diagram show in the outline; the diagram reads back as Mermaid.
+        // Shapes, the diagram and its walkthrough show in the outline; the diagram reads back as Mermaid.
         var outline = Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId }));
         Assert.Contains("diagram, flows right", outline);
         Assert.Contains("[hexagon] Broker", outline);
+        Assert.Contains("How it works (3 steps)", outline);
+
+        // A rendered sequence diagram, and a walkthrough added on its own.
+        var sequence = Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new
+        {
+            canvasId,
+            title = "Produce handshake",
+            mermaid = "sequenceDiagram\n  participant P as Producer\n  participant B as Broker\n  P->>B: Produce(records)\n  B-->>P: Ack(offset)"
+        }));
+        Assert.True(sequence.GetProperty("changed").GetBoolean());
+        Assert.StartsWith("sequenceDiagram", Rpc.Text(await Rpc.Call(client, Everyday, "get_diagram", new { canvasId, region = "Produce handshake" })));
+        Rpc.Data(await Rpc.Call(client, Everyday, "add_walkthrough", new
+        {
+            canvasId,
+            region = "Produce path",
+            title = "Failure modes",
+            steps = new[] { new { text = "If the broker is down the producer retries.", highlight = new[] { "Producer" } } }
+        }));
         var mermaid = Rpc.Text(await Rpc.Call(client, Everyday, "get_diagram", new { canvasId, region = "Produce path" }));
         Assert.StartsWith("flowchart LR", mermaid);
         Assert.Contains("==>|\"append\"|", mermaid);
 
         // A shape added piece by piece, and a connection from an explanatory card into the diagram.
-        var version = drawn.GetProperty("version").GetInt64();
+        var version = Rpc.Data(await Rpc.Call(client, Everyday, "list_canvases", new { query = "Kafka" }))[0].GetProperty("version").GetInt64();
         var added = Rpc.Data(await Rpc.Call(client, Everyday, "add_to_canvas", new
         {
             canvasId,
@@ -249,6 +276,38 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         Assert.StartsWith("flowchart TD", after);
         Assert.DoesNotContain("Partition log", after);
         Assert.True(added.GetProperty("changed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Diagrams_show_in_the_conversation_through_an_mcp_app()
+    {
+        var client = host.Client();
+        // The tool points at the app; the app is an HTML resource with the MCP Apps MIME type.
+        var tools = (await Rpc.Send(client, Everyday, "tools/list")).Body.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
+        foreach (var name in new[] { "show_diagram", "add_diagram" })
+            Assert.Equal("ui://sprawl/diagram", tools.Single(t => t.GetProperty("name").GetString() == name).GetProperty("_meta").GetProperty("ui").GetProperty("resourceUri").GetString());
+        var resources = (await Rpc.Send(client, Everyday, "resources/list")).Body.GetProperty("result").GetProperty("resources").EnumerateArray().ToList();
+        Assert.Contains(resources, r => r.GetProperty("uri").GetString() == "ui://sprawl/diagram" && r.GetProperty("mimeType").GetString() == "text/html;profile=mcp-app");
+        var read = (await Rpc.Send(client, Everyday, "resources/read", new Dictionary<string, object?> { ["uri"] = "ui://sprawl/diagram" })).Body;
+        Assert.True(read.TryGetProperty("result", out var readResult), read.ToString());
+        var html = readResult.GetProperty("contents")[0].GetProperty("text").GetString()!;
+        Assert.Contains("ui/initialize", html);
+        Assert.Contains("ui/notifications/tool-result", html);
+        Assert.DoesNotContain("http://", html.Replace("http://www.w3.org", "", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc.Send(client, null, "resources/read", new Dictionary<string, object?> { ["uri"] = "ui://sprawl/diagram" })).Status);
+
+        // show_diagram returns the drawing, the Mermaid and the walkthroughs.
+        var created = Rpc.Data(await Rpc.Call(client, Everyday, "create_canvas", new { title = "App check" }));
+        var canvasId = created.GetProperty("canvasId").GetString()!;
+        Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new
+        {
+            canvasId, title = "Tiny", mermaid = "flowchart LR\n  a[Ask] --> b[Answer]",
+            walkthrough = new object[] { new { text = "You ask.", highlight = new[] { "a" } }, new { text = "It answers.", highlight = new[] { "a", "b" } } }
+        }));
+        var view = Rpc.Data(await Rpc.Call(client, Everyday, "show_diagram", new { canvasId, region = "Tiny" }));
+        Assert.StartsWith("<svg", view.GetProperty("svg").GetString());
+        Assert.StartsWith("flowchart LR", view.GetProperty("mermaid").GetString());
+        Assert.Equal(2, view.GetProperty("walkthroughs")[0].GetProperty("steps").GetArrayLength());
     }
 
     [Fact]

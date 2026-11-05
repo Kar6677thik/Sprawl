@@ -218,4 +218,70 @@ public sealed class DiagramTests
         Assert.Contains("[diamond] Card valid?", outline);
         Assert.Contains("[dashed]", outline);
     }
+
+    private const string Login = """
+        sequenceDiagram
+          participant B as Browser
+          participant A as API
+          participant I as Identity
+          B->>A: GET /orders
+          A-->>B: 401 + resource_metadata
+          B->>I: authorize (PKCE)
+          I-->>B: code
+          B->>I: token
+          I-->>B: access token
+          B->>A: GET /orders (Bearer)
+          A-->>B: 200 orders
+        """;
+
+    [Theory]
+    [InlineData("flowchart LR\n a --> b", "flowchart")]
+    [InlineData("graph TD\n a --> b", "flowchart")]
+    [InlineData("sequenceDiagram\n A->>B: hi", "sequenceDiagram")]
+    [InlineData("%% comment\n\nerDiagram\n A ||--o{ B : has", "erDiagram")]
+    [InlineData("---\ntitle: Plan\n---\ngantt\n title X", "gantt")]
+    [InlineData("stateDiagram-v2\n [*] --> On", "stateDiagram-v2")]
+    [InlineData("mindmap\n  root((Raft))", "mindmap")]
+    [InlineData("architecture-beta\n service api(server)[API]", "architecture-beta")]
+    public void Every_mermaid_type_is_recognised(string source, string type) => Assert.Equal(type, Mermaid.DiagramType(source));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("hello world")]
+    [InlineData("<script>alert(1)</script>")]
+    public void Text_that_is_not_mermaid_is_refused(string source) =>
+        Assert.Equal(ErrorCodes.InvalidRequest, Assert.Throws<SprawlException>(() => Mermaid.DiagramType(source)).Code);
+
+    [Fact]
+    public void Any_other_mermaid_type_becomes_one_rendered_card_sized_from_its_source()
+    {
+        var canvas = new Sandbox();
+        var result = canvas.Run(Mcp, new AddDiagramIntent("OAuth login", Login, "l"));
+
+        var region = canvas.Region("OAuth login");
+        var card = Assert.Single(canvas.State.CardsIn(region.Id));
+        Assert.Equal(result.Refs["l:diagram"], card.Id);
+        Assert.Equal((CardKinds.Mermaid, "OAuth login"), (card.Kind, card.Title));
+        Assert.StartsWith("sequenceDiagram", card.Body);
+        Assert.Equal(MermaidGeometry.Size(Login), (card.W, card.H));
+        Assert.True(card.W >= 3 * 170 && card.H >= 8 * 46, "three participants and eight messages need room");
+        Assert.True(region.W >= card.W + 2 * Geometry.Padding);
+        Assert.Equal(Login.Trim() + "\n", Mermaid.Export(canvas.State, region));
+        Assert.Contains("mermaid OAuth login", OutlineRenderer.Render(canvas.State, 2, new OutlineOptions()));
+    }
+
+    [Fact]
+    public void A_diagram_can_be_redrawn_as_a_different_type()
+    {
+        var canvas = new Sandbox();
+        canvas.Run(Mcp, new AddDiagramIntent("Login", "flowchart LR\n b[Browser] --> a[API]", "l"));
+        canvas.Run(Mcp, new AddDiagramIntent("Login", Login, "l2", Replace: true));
+
+        var card = Assert.Single(canvas.State.CardsIn(canvas.Region("Login").Id));
+        Assert.Equal(CardKinds.Mermaid, card.Kind);
+        Assert.Empty(canvas.State.Connections);
+
+        canvas.Run(Mcp, new AddDiagramIntent("Login", "flowchart TD\n b[Browser] --> a[API]", "l3", Replace: true));
+        Assert.Equal(2, canvas.State.CardsIn(canvas.Region("Login").Id).Count(c => c.Shape is not null));
+    }
 }

@@ -10,6 +10,7 @@ public sealed class CanvasState
     public Dictionary<string, Card> Cards { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, Connection> Connections { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, Sketch> Sketches { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, Walkthrough> Walkthroughs { get; } = new(StringComparer.Ordinal);
 
     public CanvasState Clone()
     {
@@ -18,6 +19,7 @@ public sealed class CanvasState
         foreach (var (id, card) in Cards) copy.Cards[id] = card;
         foreach (var (id, connection) in Connections) copy.Connections[id] = connection;
         foreach (var (id, sketch) in Sketches) copy.Sketches[id] = sketch;
+        foreach (var (id, walkthrough) in Walkthroughs) copy.Walkthroughs[id] = walkthrough;
         return copy;
     }
 
@@ -26,7 +28,8 @@ public sealed class CanvasState
         [.. Regions.Values.OrderBy(region => region.Id, StringComparer.Ordinal)],
         [.. Cards.Values.OrderBy(card => card.Id, StringComparer.Ordinal)],
         [.. Connections.Values.OrderBy(connection => connection.Id, StringComparer.Ordinal)],
-        [.. Sketches.Values.OrderBy(sketch => sketch.Id, StringComparer.Ordinal)]);
+        [.. Sketches.Values.OrderBy(sketch => sketch.Id, StringComparer.Ordinal)],
+        [.. Walkthroughs.Values.OrderBy(w => w.Id, StringComparer.Ordinal)]);
 
     public static CanvasState FromSnapshot(CanvasSnapshot snapshot)
     {
@@ -35,6 +38,7 @@ public sealed class CanvasState
         foreach (var card in snapshot.Cards) state.Cards[card.Id] = card;
         foreach (var connection in snapshot.Connections) state.Connections[connection.Id] = connection;
         foreach (var sketch in snapshot.Sketches ?? []) state.Sketches[sketch.Id] = sketch;
+        foreach (var walkthrough in snapshot.Walkthroughs ?? []) state.Walkthroughs[walkthrough.Id] = walkthrough;
         return state;
     }
 
@@ -45,6 +49,7 @@ public sealed class CanvasState
         EntityKind.Card => Cards.GetValueOrDefault(id),
         EntityKind.Connection => Connections.GetValueOrDefault(id),
         EntityKind.Sketch => Sketches.GetValueOrDefault(id),
+        EntityKind.Walkthrough => Walkthroughs.GetValueOrDefault(id),
         _ => null
     };
 
@@ -53,9 +58,9 @@ public sealed class CanvasState
 }
 
 /// <param name="Sketches">Absent in snapshots written before sketches existed.</param>
-public sealed record CanvasSnapshot(CanvasMeta? Meta, IReadOnlyList<Region> Regions, IReadOnlyList<Card> Cards, IReadOnlyList<Connection> Connections, IReadOnlyList<Sketch>? Sketches = null);
+public sealed record CanvasSnapshot(CanvasMeta? Meta, IReadOnlyList<Region> Regions, IReadOnlyList<Card> Cards, IReadOnlyList<Connection> Connections, IReadOnlyList<Sketch>? Sketches = null, IReadOnlyList<Walkthrough>? Walkthroughs = null);
 
-public enum EntityKind { Unknown, Canvas, Region, Card, Connection, Sketch }
+public enum EntityKind { Unknown, Canvas, Region, Card, Connection, Sketch, Walkthrough }
 
 public static class EntityIds
 {
@@ -64,6 +69,7 @@ public static class EntityIds
     public const string CardPrefix = "cd_";
     public const string ConnectionPrefix = "cx_";
     public const string SketchPrefix = "sk_";
+    public const string WalkthroughPrefix = "wt_";
     private const string Alphabet = "0123456789abcdefghjkmnpqrstvwxyz"; // Crockford base32, lowercase
 
     public static EntityKind KindOf(string id) => id.Length < 4 ? EntityKind.Unknown : id[..3] switch
@@ -73,6 +79,7 @@ public static class EntityIds
         CardPrefix => EntityKind.Card,
         ConnectionPrefix => EntityKind.Connection,
         SketchPrefix => EntityKind.Sketch,
+        WalkthroughPrefix => EntityKind.Walkthrough,
         _ => EntityKind.Unknown
     };
 
@@ -83,6 +90,7 @@ public static class EntityIds
         EntityKind.Card => CardPrefix,
         EntityKind.Connection => ConnectionPrefix,
         EntityKind.Sketch => SketchPrefix,
+        EntityKind.Walkthrough => WalkthroughPrefix,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 

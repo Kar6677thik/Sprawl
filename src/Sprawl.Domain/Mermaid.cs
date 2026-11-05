@@ -19,6 +19,36 @@ public static partial class Mermaid
     public sealed record Subgraph(string Id, string Title, string? Layout);
     public sealed record Chart(string Layout, IReadOnlyList<Node> Nodes, IReadOnlyList<Edge> Edges, IReadOnlyList<Subgraph> Subgraphs);
 
+    public const string Flowchart = "flowchart";
+
+    /// <summary>The diagram types Mermaid renders, by their opening keyword. Flowcharts become native shapes; the rest are rendered cards.</summary>
+    public static readonly HashSet<string> Types = new(StringComparer.Ordinal)
+    {
+        "flowchart", "graph", "sequenceDiagram", "classDiagram", "classDiagram-v2", "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt", "pie",
+        "quadrantChart", "requirementDiagram", "gitGraph", "C4Context", "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "mindmap", "timeline",
+        "sankey", "sankey-beta", "xychart", "xychart-beta", "block", "block-beta", "packet", "packet-beta", "kanban", "architecture", "architecture-beta",
+        "radar", "radar-beta", "treemap", "treemap-beta", "venn", "venn-beta", "wardley", "wardley-beta", "zenuml"
+    };
+
+    /// <summary>The source's diagram type (<see cref="Flowchart"/> for flowcharts and graphs), skipping front matter and comments.</summary>
+    public static string DiagramType(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source)) throw SprawlException.Invalid("The Mermaid text is empty.");
+        if (source.Length > Limits.Mermaid) throw SprawlException.Limit($"A Mermaid diagram is at most {Limits.Mermaid} characters.");
+        var lines = source.ReplaceLineEndings("\n").Split('\n').Select(l => l.Trim()).ToList();
+        var i = 0;
+        if (i < lines.Count && lines[i] == "---") { i++; while (i < lines.Count && lines[i] != "---") i++; i++; }
+        for (; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            if (line.Length == 0 || line.StartsWith("%%", StringComparison.Ordinal)) continue;
+            var keyword = line.Split((char[])[' ', '\t', ':', '{'], 2)[0];
+            if (!Types.Contains(keyword)) break;
+            return keyword is "flowchart" or "graph" ? Flowchart : keyword;
+        }
+        throw SprawlException.Invalid("Start the diagram with a Mermaid type: flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, mindmap, timeline, gantt, journey, quadrantChart, sankey-beta, xychart-beta, architecture-beta, C4Context, gitGraph, pie, kanban, block-beta, ….");
+    }
+
     public static Chart Parse(string source)
     {
         if (string.IsNullOrWhiteSpace(source)) throw SprawlException.Invalid("The Mermaid text is empty.");
@@ -201,6 +231,9 @@ public static partial class Mermaid
     /// <summary>A diagram region (and its sub-regions) as a Mermaid flowchart: shapes, labels, connections and styles.</summary>
     public static string Export(CanvasState state, Region region)
     {
+        // A region that is one rendered Mermaid diagram reads back as its own source.
+        var only = state.CardsIn(region.Id).ToList();
+        if (only.Count == 1 && only[0].Kind == CardKinds.Mermaid && !state.RegionsIn(region.Id).Any()) return only[0].Body.TrimEnd() + "\n";
         var direction = region.Layout == RegionLayouts.FlowRight ? "LR" : "TD";
         var md = new StringBuilder($"flowchart {direction}\n");
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);

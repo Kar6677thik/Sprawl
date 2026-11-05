@@ -11,7 +11,8 @@ export default defineConfig({
     outDir: "../Sprawl.Api/wwwroot",
     emptyOutDir: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 900,
+    // Mermaid's diagram engines (and ELK in the Tidy worker) are large but load only when a rendered diagram appears.
+    chunkSizeWarningLimit: 2500,
   },
   server: {
     port: 5173,

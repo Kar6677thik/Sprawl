@@ -43,7 +43,7 @@ public static partial class Exchange
                 md.Append("- ").Append(card.Kind == CardKinds.Question ? "**Q:** " : "").Append("**").Append(title).Append("**")
                     .Append(card.Emphasis == Emphases.Key ? " ★" : "").Append('\n');
                 if (card.Body.Length == 0) continue;
-                var body = card.Kind == CardKinds.Code ? $"```{card.Language}\n{card.Body}\n```" : card.Body;
+                var body = card.Kind == CardKinds.Code ? $"```{card.Language}\n{card.Body}\n```" : card.Kind == CardKinds.Mermaid ? $"```mermaid\n{card.Body}\n```" : card.Body;
                 foreach (var line in body.ReplaceLineEndings("\n").Split('\n')) md.Append(line.Length == 0 ? "" : "  ").Append(line).Append('\n');
             }
             md.Append('\n');
@@ -95,7 +95,7 @@ public static partial class Exchange
     private static string CardText(Card card)
     {
         var heading = card.Kind == CardKinds.Link && card.Url is not null ? $"## [{card.Title}]({card.Url})" : $"## {card.Title}";
-        var body = card.Kind == CardKinds.Code ? $"```{card.Language}\n{card.Body}\n```" : card.Body;
+        var body = card.Kind == CardKinds.Code ? $"```{card.Language}\n{card.Body}\n```" : card.Kind == CardKinds.Mermaid ? $"```mermaid\n{card.Body}\n```" : card.Body;
         return body.Length == 0 ? heading : heading + "\n\n" + body;
     }
 

@@ -106,8 +106,11 @@ public sealed class CanvasPrompts
            (flowchart TD), the key decision or state logic (diamonds for decisions, labelled yes/no edges), and the lifecycle of the central object.
         3. Draw each with add_diagram, near the region of cards it illustrates. Use thick edges for the main path, dashed for async or optional ones,
            and short edge labels that say what moves (requests, events, rows).
-        4. Connect the cards that explain a component to its shape (the refs add_diagram returns name each node) so the canvas reads both ways.
-        5. Add question cards for what the diagrams leave open. Finish with one line per diagram: what it shows.
+        4. Give each diagram a walkthrough (add_diagram's walkthrough, or add_walkthrough): 4-10 steps in the order a newcomer needs them,
+           each lighting up the shapes it talks about. Use sequenceDiagram for interactions over time, stateDiagram-v2 for lifecycles,
+           erDiagram for data models and mindmap for an overview; flowcharts for architectures and processes.
+        5. Connect the cards that explain a component to its shape (the refs add_diagram returns name each node) so the canvas reads both ways.
+        6. Add question cards for what the diagrams leave open. Finish with one line per diagram: what it shows.
         Read a diagram with get_diagram before changing it; redraw it with add_diagram replace=true, passing expectedVersion.
         """;
 

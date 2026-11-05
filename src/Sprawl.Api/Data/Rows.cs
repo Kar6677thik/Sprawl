@@ -15,6 +15,7 @@ public static class Rows
     private const string CardColumns = "id, region_id, kind, title, body, url, language, tint, emphasis, size, x, y, w, h, placement, size_source, created_by, updated_by, created_at, updated_at, shape";
     private const string ConnectionColumns = "id, source_id, target_id, kind, label, created_by, created_at, line, ends";
     private const string SketchColumns = "id, region_id, path, tint, stroke, x, y, w, h, created_by, created_at";
+    private const string WalkthroughColumns = "id, region_id, title, steps, created_by, created_at, updated_at";
 
     public static async Task<CanvasRow?> Canvas(SqliteConnection connection, SqliteTransaction? transaction, string id, CancellationToken cancellationToken)
     {
@@ -63,6 +64,16 @@ public static class Rows
                 state.Sketches[sketch.Id] = sketch;
             }
         }
+        await using (var command = connection.Command(transaction, $"SELECT {WalkthroughColumns} FROM walkthroughs WHERE canvas_id = $id", ("$id", meta.Id)))
+        {
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var steps = JsonSerializer.Deserialize<List<WalkthroughStep>>(reader.GetString(3), SprawlJson.Options) ?? [];
+                var walkthrough = new Walkthrough(reader.GetString(0), reader.GetString(1), reader.GetString(2), steps, reader.GetString(4), reader.Time(5), reader.Time(6));
+                state.Walkthroughs[walkthrough.Id] = walkthrough;
+            }
+        }
         return state;
     }
 
@@ -103,6 +114,7 @@ public static class Rows
                         EntityKind.Card => "cards",
                         EntityKind.Connection => "connections",
                         EntityKind.Sketch => "sketches",
+                        EntityKind.Walkthrough => "walkthroughs",
                         _ => throw new InvalidOperationException("Canvas metadata is never deleted by an op.")
                     };
                     await connection.Exec(transaction, $"DELETE FROM {table} WHERE id = $id AND canvas_id = $canvas", cancellationToken, ("$id", op.EntityId), ("$canvas", canvasId));
@@ -140,6 +152,14 @@ public static class Rows
                         "created_by = excluded.created_by, created_at = excluded.created_at, line = excluded.line, ends = excluded.ends",
                         cancellationToken, ("$line", e.Line), ("$ends", e.Ends), ("$canvas", canvasId), ("$id", e.Id), ("$source", e.SourceId), ("$target", e.TargetId), ("$kind", e.Kind), ("$label", e.Label),
                         ("$by", e.CreatedBy), ("$created", Sql.Iso(e.CreatedAt)));
+                    break;
+                case Walkthrough w:
+                    await connection.Exec(transaction,
+                        $"INSERT INTO walkthroughs (canvas_id, {WalkthroughColumns}) VALUES ($canvas, $id, $region, $title, $steps, $by, $created, $updated) " +
+                        "ON CONFLICT(id) DO UPDATE SET region_id = excluded.region_id, title = excluded.title, steps = excluded.steps, created_by = excluded.created_by, " +
+                        "created_at = excluded.created_at, updated_at = excluded.updated_at",
+                        cancellationToken, ("$canvas", canvasId), ("$id", w.Id), ("$region", w.RegionId), ("$title", w.Title),
+                        ("$steps", JsonSerializer.Serialize(w.Steps, SprawlJson.Options)), ("$by", w.CreatedBy), ("$created", Sql.Iso(w.CreatedAt)), ("$updated", Sql.Iso(w.UpdatedAt)));
                     break;
                 case Sketch k:
                     await connection.Exec(transaction,

@@ -7,7 +7,9 @@ public static class CardKinds
     public const string Question = "question";
     public const string Link = "link";
     public const string Code = "code";
-    public static readonly string[] All = [Idea, Note, Question, Link, Code];
+    /// <summary>A rendered Mermaid diagram of any type (sequence, class, ER, state, mind map, timeline, …); the body is the source.</summary>
+    public const string Mermaid = "mermaid";
+    public static readonly string[] All = [Idea, Note, Question, Link, Code, Mermaid];
 }
 
 public static class ConnectionKinds
@@ -172,4 +174,8 @@ public static class Limits
     public const int SketchSize = 20000;
     public const int Mermaid = 20000;
     public const int DiagramNodes = 300;
+    public const int WalkthroughSteps = 40;
+    public const int StepText = 2000;
+    public const int StepHighlight = 40;
+    public const int WalkthroughsPerCanvas = 200;
 }

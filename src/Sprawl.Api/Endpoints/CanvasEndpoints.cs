@@ -56,11 +56,29 @@ public static class CanvasEndpoints
         api.MapGet("/canvases/{id}/regions/{regionId}/mermaid", async (string id, string regionId, CanvasStore store, HttpContext context, CancellationToken ct) =>
         {
             var (row, state) = await store.Current(id, ct);
-            var region = state.Regions.GetValueOrDefault(regionId)
-                ?? state.Regions.Values.Where(r => Text.SameTitle(r.Title, regionId)).OrderBy(r => r.ParentId is null ? 0 : 1).FirstOrDefault()
-                ?? throw SprawlException.NotFound($"Region {regionId} is not on canvas {id}.");
             context.Response.Headers.ETag = Http.ETag(row.Version);
-            return Results.Text(Mermaid.Export(state, region), "text/plain; charset=utf-8");
+            return Results.Text(Mermaid.Export(state, FindRegion(state, id, regionId)), "text/plain; charset=utf-8");
+        });
+
+        // The region drawn by the server: an SVG that renders the same in the app, an export or a chat.
+        api.MapGet("/canvases/{id}/regions/{regionId}/svg", async (string id, string regionId, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            var region = FindRegion(state, id, regionId);
+            // The SVG holds escaped, untrusted text; served on its own it may run nothing and load nothing.
+            context.Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+            context.Response.Headers.ContentDisposition = $"inline; filename=\"{FileName(region.Title)}.svg\"";
+            context.Response.Headers.ETag = Http.ETag(row.Version);
+            return Results.Text(SvgRenderer.Render(state, region), "image/svg+xml; charset=utf-8");
+        });
+
+        api.MapGet("/canvases/{id}/regions/{regionId}/view", async (string id, string regionId, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            var region = FindRegion(state, id, regionId);
+            var walkthroughs = state.Walkthroughs.Values.Where(w => w.RegionId == region.Id).OrderBy(w => w.CreatedAt).ThenBy(w => w.Id, StringComparer.Ordinal).ToList();
+            return Http.WithVersion(context, row.Version, new RegionView(id, row.Meta.Title, row.Version, region.Id, region.Title, region.Layout,
+                SvgRenderer.Render(state, region), Mermaid.Export(state, region), walkthroughs));
         });
 
         api.MapGet("/canvases/{id}/links/resolve", async (string id, string target, CrossLinks cross, CancellationToken ct) =>
@@ -147,6 +165,12 @@ public static class CanvasEndpoints
     }
 
     public const long ImportBodyLimit = 8 * 1024 * 1024;
+
+    /// <summary>A region by id, or by title (top-level first).</summary>
+    private static Region FindRegion(CanvasState state, string canvasId, string reference) =>
+        state.Regions.GetValueOrDefault(reference)
+        ?? state.Regions.Values.Where(r => Text.SameTitle(r.Title, reference)).OrderBy(r => r.ParentId is null ? 0 : 1).ThenBy(r => r.CreatedAt).FirstOrDefault()
+        ?? throw SprawlException.NotFound($"Region {reference} is not on canvas {canvasId}.");
 
     /// <summary>A download name from a canvas title: letters, digits and dashes only, never empty.</summary>
     public static string FileName(string title)

@@ -1,4 +1,4 @@
-import { kindOf, type Card, type CanvasDocument, type CanvasEvent, type CanvasMeta, type Connection, type Region, type Sketch } from "../api/types";
+import { kindOf, type Card, type CanvasDocument, type CanvasEvent, type CanvasMeta, type Connection, type Region, type Sketch, type Walkthrough } from "../api/types";
 
 export type ApplyResult =
   | { status: "applied"; doc: CanvasDocument; added: string[] }
@@ -17,6 +17,7 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
   const cards = new Map(doc.cards.map((c) => [c.id, c]));
   const connections = new Map(doc.connections.map((c) => [c.id, c]));
   const sketches = new Map((doc.sketches ?? []).map((s) => [s.id, s]));
+  const walkthroughs = new Map((doc.walkthroughs ?? []).map((w) => [w.id, w]));
   let meta = doc.meta;
   const added: string[] = [];
   for (const op of event.ops) {
@@ -38,6 +39,9 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
       case "sketch":
         set(sketches, op.entityId, after as Sketch | null);
         break;
+      case "walkthrough":
+        set(walkthroughs, op.entityId, after as Walkthrough | null);
+        break;
     }
   }
   return {
@@ -52,6 +56,7 @@ export function applyEvent(doc: CanvasDocument, event: CanvasEvent): ApplyResult
       cards: [...cards.values()],
       connections: [...connections.values()],
       sketches: [...sketches.values()],
+      walkthroughs: [...walkthroughs.values()],
     },
   };
 }

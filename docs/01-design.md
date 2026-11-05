@@ -147,6 +147,7 @@ Everything is under `/api/v1`. Errors are RFC 9457 `application/problem+json` wi
 | `GET /canvases/{id}/export?format=markdown\|json-canvas` | Download as Markdown or JSON Canvas 1.0 (`.canvas`, with a `sprawlKind` extension per card) | |
 | `POST /canvases/import` `{title, canvas}` | A JSON Canvas as a new canvas, in one create batch of up to 9,300 intents | Owner only; 8 MiB body |
 | `GET /canvases/{id}/regions/{region}/mermaid` | A region as a Mermaid flowchart (shapes, groups, arrows, styles) | Text; the region by id or title |
+| `GET /canvases/{id}/regions/{region}/svg` / `…/view` | The region drawn by the server as SVG / SVG, Mermaid and walkthroughs together | SVG served with `default-src 'none'` |
 | `GET /canvases/{id}/links/resolve?target=` | Where a `[[link]]` leads, on this canvas or another (`Canvas/Card` or a card id) | 404 when it leads nowhere |
 | `GET /reviews?canvas=&limit=` / `POST /reviews/{cardId}` `{grade}` | Open questions due for spaced review / grade one (`again`, `hard`, `good`, `easy`) | Grading is owner only |
 | `POST /cards/query` `{ids}` | Full cards plus their connections | ≤ 50 IDs; IDs are global, so no canvas ID is needed |
@@ -170,6 +171,7 @@ Everything is under `/api/v1`. Errors are RFC 9457 `application/problem+json` wi
 | `setLayout` | UI only: `[{id, x, y, w?, h?, region?}]`, which marks items manual unless `asAuto` (Tidy) |
 | `unpin` | UI only: hand items back to automatic placement |
 | `addDiagram` | `title`, `mermaid`, `ref?`, `parent?`, `near?`, `layout?`, `replace?`: a Mermaid flowchart as a laid-out diagram region ([03-features.md](03-features.md) §3) |
+| `addWalkthrough` / `deleteWalkthrough` | `region`, `title`, `steps[{text, highlight[]}]`, `ref?`, `replace?` / `id` |
 | `updateConnection` | `id`, `kind?`, `label?`, `line?`, `ends?` |
 | `addSketch` / `deleteSketches` | UI only: `path`, `x`, `y`, `w`, `h`, `region?`, `tint?`, `stroke?` / `ids` |
 

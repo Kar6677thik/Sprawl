@@ -1,6 +1,6 @@
 // Mirrors src/Sprawl.Contracts (camelCase JSON). Keep in step with the C# records.
 
-export type CardKind = "idea" | "note" | "question" | "link" | "code";
+export type CardKind = "idea" | "note" | "question" | "link" | "code" | "mermaid";
 export type ConnectionKind = "relates" | "leads-to" | "contradicts" | "example-of" | "depends-on";
 export type Placement = "auto" | "manual";
 export type Author = "human" | "ai";
@@ -90,6 +90,23 @@ export interface CanvasDocument {
   connections: Connection[];
   layoutWarnings: LayoutWarning[];
   sketches?: Sketch[] | null;
+  walkthroughs?: Walkthrough[] | null;
+}
+
+export interface WalkthroughStep {
+  text: string;
+  highlight?: string[] | null;
+}
+
+/** A guided tour of a region: steps of explanation, each lighting up what it talks about. */
+export interface Walkthrough {
+  id: string;
+  regionId: string;
+  title: string;
+  steps: WalkthroughStep[];
+  createdBy: Author;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A freehand stroke drawn by the owner; the path is relative to its box, the box to its region. */
@@ -186,7 +203,9 @@ export type Intent =
   | { type: "setLayout"; items: LayoutItem[] }
   | { type: "unpin"; ids: string[] }
   | { type: "addSketch"; path: string; x: number; y: number; w: number; h: number; region?: string; tint?: string; stroke?: number }
-  | { type: "deleteSketches"; ids: string[] };
+  | { type: "deleteSketches"; ids: string[] }
+  | { type: "addWalkthrough"; region: string; title: string; steps: WalkthroughStep[]; ref?: string; replace?: boolean }
+  | { type: "deleteWalkthrough"; id: string };
 
 export interface BatchRequest {
   intents: Intent[];
@@ -229,7 +248,7 @@ export interface Session {
   devSignIn: boolean;
 }
 
-export type EntityKind = "canvas" | "region" | "card" | "connection" | "sketch" | "unknown";
+export type EntityKind = "canvas" | "region" | "card" | "connection" | "sketch" | "walkthrough" | "unknown";
 
 export function kindOf(id: string): EntityKind {
   switch (id.slice(0, 3)) {
@@ -238,6 +257,7 @@ export function kindOf(id: string): EntityKind {
     case "cd_": return "card";
     case "cx_": return "connection";
     case "sk_": return "sketch";
+    case "wt_": return "walkthrough";
     default: return "unknown";
   }
 }

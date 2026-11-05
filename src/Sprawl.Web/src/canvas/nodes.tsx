@@ -1,11 +1,15 @@
 import { createContext, memo, useContext } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import type { CardNode, RegionNode, SketchNode } from "./flow";
 import type { ZoomLevel } from "./zoom";
 import { Body, KindGlyph } from "./parts";
 import { shapeOutline } from "./shapes";
+import { MermaidView } from "./MermaidView";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
+
+/** Regions that have walkthroughs, and how to play one (a ▶ in the region's header). */
+export const WalkthroughContext = createContext<{ regions: ReadonlySet<string>; play: (regionId: string) => void }>({ regions: new Set(), play: () => {} });
 
 /**
  * Diagram nodes get a port on each side, shown on hover: drag from one to another node to connect them, as in draw.io.
@@ -63,14 +67,42 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
         <span className="region-title">{region.title}</span>
         {level !== "near" && <span className="region-count">{cardCount}</span>}
         {region.placement === "manual" && level !== "far" && <span className="pin" title="Placed by hand" aria-label="Placed by hand" />}
+        <PlayButton regionId={region.id} />
       </header>
     </div>
   );
 });
 
+function PlayButton({ regionId }: { regionId: string }) {
+  const walkthroughs = useContext(WalkthroughContext);
+  if (!walkthroughs.regions.has(regionId)) return null;
+  return (
+    <button type="button" className="region-play" title="Play the walkthrough (W)" onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); walkthroughs.play(regionId); }}>
+      <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor" /></svg>
+      Walkthrough
+    </button>
+  );
+}
+
 export const CardView = memo(function CardView({ data, selected }: NodeProps<CardNode>) {
   const { card, fresh, diagram } = data;
   const level = useContext(ZoomLevelContext);
+  // A rendered diagram is its own content: shown from the titles zoom on, resizable by the owner when selected.
+  if (card.kind === "mermaid" && level !== "far") {
+    return (
+      <article className={`card kind-mermaid${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`} data-tint={card.tint ?? undefined} aria-label={card.title}>
+        <NodeResizer isVisible={selected} minWidth={240} minHeight={160} lineClassName="resize-line" handleClassName="resize-handle" />
+        <Anchors />
+        {diagram && <Ports />}
+        <header className="card-header">
+          <KindGlyph kind={card.kind} />
+          <h3 className="card-title">{card.title}</h3>
+        </header>
+        <div className="card-mermaid"><MermaidView source={card.body} /></div>
+      </article>
+    );
+  }
   if (card.shape && level !== "far") {
     const classes = ["shape-node", `shape-${card.shape}`];
     if (selected) classes.push("is-selected");

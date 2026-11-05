@@ -24,7 +24,7 @@ public static class Geometry
     public static int ColumnX(int col) => Padding + col * Pitch;
 
     public static string SizeFor(string kind, string body) =>
-        kind == CardKinds.Code ? CardSizes.Tall : body.Length <= 140 ? CardSizes.Compact : body.Length <= 600 ? CardSizes.Regular : CardSizes.Tall;
+        kind is CardKinds.Code or CardKinds.Mermaid ? CardSizes.Tall : body.Length <= 140 ? CardSizes.Compact : body.Length <= 600 ? CardSizes.Regular : CardSizes.Tall;
 
     public static int HeightOf(string size) => size switch
     {

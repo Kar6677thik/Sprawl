@@ -97,6 +97,8 @@ public sealed partial class BatchEngine
         }
         // A sketch lives inside its region: when a merge or delete removes the region, its sketches go with it.
         foreach (var orphan in state.Sketches.Values.Where(s => s.RegionId is not null && !state.Regions.ContainsKey(s.RegionId)).ToList()) state.Sketches.Remove(orphan.Id);
+        foreach (var orphan in state.Walkthroughs.Values.Where(w => !state.Regions.ContainsKey(w.RegionId)).ToList()) state.Walkthroughs.Remove(orphan.Id);
+        if (state.Walkthroughs.Count > Limits.WalkthroughsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.WalkthroughsPerCanvas} walkthroughs.");
         if (state.Sketches.Count > Limits.SketchesPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.SketchesPerCanvas} sketches.");
         if (state.Connections.Count > Limits.ConnectionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.ConnectionsPerCanvas} connections.");
         var ops = StateOps.Diff(original, state);
@@ -128,6 +130,8 @@ public sealed partial class BatchEngine
             case DeleteSketchesIntent delete: DeleteSketches(delete); break;
             case UpdateConnectionIntent update: UpdateConnection(update); break;
             case AddDiagramIntent diagram: AddDiagram(diagram); break;
+            case AddWalkthroughIntent walkthrough: AddWalkthrough(walkthrough); break;
+            case DeleteWalkthroughIntent delete: if (!state.Walkthroughs.Remove(delete.Id)) skipped.Add(new("missing", null, delete.Id)); break;
             default: throw SprawlException.Invalid("Unknown intent.");
         }
     }
@@ -501,7 +505,8 @@ public sealed partial class BatchEngine
     /// </summary>
     private void AddDiagram(AddDiagramIntent add)
     {
-        var chart = Mermaid.Parse(add.Mermaid);
+        var type = Mermaid.DiagramType(add.Mermaid);
+        var chart = type == Mermaid.Flowchart ? Mermaid.Parse(add.Mermaid) : new Mermaid.Chart(RegionLayouts.FlowDown, [], [], []);
         var flow = add.Layout is null ? chart.Layout : Text.Layout(add.Layout);
         if (!RegionLayouts.IsDiagram(flow)) flow = chart.Layout;
         var prefix = add.Ref ?? $"diagram{index + 1}";
@@ -534,6 +539,12 @@ public sealed partial class BatchEngine
 
         string NodeRef(string nodeId) => prefix.Length + nodeId.Length + 1 <= Limits.Ref ? $"{prefix}:{nodeId}" : $"{prefix}:#{StableHash(nodeId)}";
         string GroupRef(string groupId) => prefix.Length + groupId.Length + 2 <= Limits.Ref ? $"{prefix}/{groupId}" : $"{prefix}/#{StableHash(groupId)}";
+        if (type != Mermaid.Flowchart)
+        {
+            // Sequence, class, ER, state, mind map, timeline, …: one card holding the source, rendered by the browser.
+            AddCard(new AddCardIntent(CardKinds.Mermaid, Clip(add.Title, Limits.CardTitle), region.Id, $"{prefix}:diagram", add.Mermaid.Trim()), diagramNode: true);
+            return;
+        }
         if (nested)
             foreach (var group in chart.Subgraphs)
                 AddRegion(new AddRegionIntent(Clip(group.Title, Limits.RegionTitle), GroupRef(group.Id), region.Id, null, null, group.Layout ?? flow));
@@ -569,6 +580,61 @@ public sealed partial class BatchEngine
         return hash;
     }
 
+    /// <summary>
+    /// A walkthrough's steps, with every highlighted name resolved now (refs from this batch, ids, or titles inside the
+    /// region), so a reader never has to guess what "the gateway" meant. A name that matches nothing fails the batch.
+    /// </summary>
+    private void AddWalkthrough(AddWalkthroughIntent add)
+    {
+        var region = RequireRegion(add.Region);
+        var title = Text.Title(add.Title, Limits.RegionTitle, "walkthrough title");
+        if (add.Steps.Count == 0 || add.Steps.Count > Limits.WalkthroughSteps) throw SprawlException.Invalid($"A walkthrough has 1-{Limits.WalkthroughSteps} steps.");
+        var scope = state.Regions.Values.Where(r => r.Id == region.Id || r.ParentId == region.Id).Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+        var steps = new List<WalkthroughStep>();
+        foreach (var (step, number) in add.Steps.Select((s, i) => (s, i + 1)))
+        {
+            var text = (step.Text ?? "").Trim();
+            if (text.Length == 0 || text.Length > Limits.StepText) throw SprawlException.Invalid($"Step {number}: the text is 1-{Limits.StepText} characters.");
+            var names = step.Highlight ?? [];
+            if (names.Count > Limits.StepHighlight) throw SprawlException.Limit($"Step {number}: highlight at most {Limits.StepHighlight} items.");
+            var ids = new List<string>();
+            foreach (var name in names)
+            {
+                var id = ResolveHighlight(name.Trim(), scope)
+                    ?? throw SprawlException.NotFound($"Step {number}: nothing in '{region.Title}' is called '{name}'. Use a card or region title, a ref from this call, or an id.");
+                if (!ids.Contains(id)) ids.Add(id);
+            }
+            steps.Add(new WalkthroughStep(text, ids));
+        }
+        var existing = state.Walkthroughs.Values.FirstOrDefault(w => w.RegionId == region.Id && Text.SameTitle(w.Title, title));
+        if (existing is not null)
+        {
+            if (!add.Replace) throw new SprawlException(ErrorCodes.Duplicate, $"'{region.Title}' already has a walkthrough called '{existing.Title}' ({existing.Id}); pass replace to rewrite it.", 409) { Entities = [existing.Id] };
+            state.Walkthroughs[existing.Id] = existing with { Title = title, Steps = steps, UpdatedAt = now };
+            if (add.Ref is not null) { ValidateRef(add.Ref); MapRef(add.Ref, existing.Id); }
+            return;
+        }
+        if (add.Ref is not null) ValidateRef(add.Ref);
+        var newId = NewId(EntityKind.Walkthrough);
+        state.Walkthroughs[newId] = new Walkthrough(newId, region.Id, title, steps, actor.Author, now, now);
+        MapRef(add.Ref, newId);
+    }
+
+    private string? ResolveHighlight(string name, HashSet<string> scope)
+    {
+        if (name.Length == 0) return null;
+        var id = refs.GetValueOrDefault(name) ?? name;
+        if (state.Find(id) is { } found && EntityIds.KindOf(found.Id) is EntityKind.Card or EntityKind.Region or EntityKind.Connection) return found.Id;
+        var card = state.Cards.Values.Where(c => c.RegionId is not null && scope.Contains(c.RegionId) && Text.SameTitle(c.Title, name))
+            .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal).FirstOrDefault();
+        if (card is not null) return card.Id;
+        var region = state.Regions.Values.FirstOrDefault(r => scope.Contains(r.Id) && Text.SameTitle(r.Title, name));
+        if (region is not null) return region.Id;
+        // "d:Broker" from a diagram call whose author meant a title, not a node id: try the title after the prefix.
+        var colon = name.IndexOf(':');
+        return colon > 0 && colon < name.Length - 1 ? ResolveHighlight(name[(colon + 1)..], scope) : null;
+    }
+
     private static string Clip(string text, int max) => text.Length <= max ? text : text[..(max - 1)].TrimEnd() + "…";
 
     /// <summary>
@@ -579,6 +645,12 @@ public sealed partial class BatchEngine
     {
         if (card.SizeSource == Placements.Manual) return card;
         var inDiagram = card.RegionId is { } r && state.Regions.TryGetValue(r, out var region) && RegionLayouts.IsDiagram(region.Layout);
+        if (card.Kind == CardKinds.Mermaid)
+        {
+            var (mw, mh) = MermaidGeometry.Size(card.Body);
+            return inDiagram ? card with { Size = CardSizes.Tall, W = mw, H = mh }
+                : card with { Size = CardSizes.Tall, W = Geometry.CardWidth, H = Geometry.TallHeight };
+        }
         if (card.Shape is { } shape)
         {
             var (w, h) = ShapeGeometry.Size(shape, card.Title);
@@ -672,8 +744,8 @@ public sealed partial class BatchEngine
         var updated = card with { RegionId = regionId, X = x, Y = y, Placement = item.AsAuto && regionId is not null ? Placements.Auto : Placements.Manual };
         if (item.W is not null || item.H is not null)
         {
-            var width = (int)Math.Round(Math.Clamp(item.W ?? card.W, 200, 1200));
-            var height = (int)Math.Round(Math.Clamp(item.H ?? card.H, 64, 1600));
+            var width = (int)Math.Round(Math.Clamp(item.W ?? card.W, 120, 2400));
+            var height = (int)Math.Round(Math.Clamp(item.H ?? card.H, 32, 2400));
             updated = updated with { W = width, H = height, SizeSource = Placements.Manual };
         }
         layout.Touch(card.Id);
@@ -840,7 +912,7 @@ public static partial class Text
     public static string Body(string? value, string kind)
     {
         var body = (value ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
-        var max = kind == CardKinds.Code ? Limits.CodeBody : Limits.CardBody;
+        var max = kind is CardKinds.Code or CardKinds.Mermaid ? Limits.CodeBody : Limits.CardBody;
         return body.Length > max ? throw SprawlException.Limit($"A {kind} card body is at most {max} characters.") : body;
     }
 

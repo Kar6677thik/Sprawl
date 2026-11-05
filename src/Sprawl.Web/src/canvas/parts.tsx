@@ -19,6 +19,7 @@ const GLYPHS: Record<CardKind, ReactNode> = {
   question: <path d="M4.2 4.2a1.9 1.9 0 1 1 2.6 1.7c-.5.2-.8.6-.8 1.1v.5M6 9.8v.2" />,
   link: <path d="M5 7 7 5M4.3 5.2 3.2 6.3a1.8 1.8 0 0 0 2.5 2.5l1.1-1.1M7.7 6.8l1.1-1.1a1.8 1.8 0 0 0-2.5-2.5L5.2 4.3" />,
   code: <path d="M4.3 3.5 2 6l2.3 2.5M7.7 3.5 10 6 7.7 8.5" />,
+  mermaid: <path d="M1.5 2h3v2.5h-3zM7.5 7.5h3V10h-3zM3 4.5v2.5h6V7.5" />,
 };
 
 /** A 12 px glyph per card kind. Kinds are told apart by shape, never by colour. */
