@@ -259,8 +259,11 @@ The images in GHCR must be **public** (the repository already is). Neither names
   - The API runs `ghcr.io/kar6677thik/sprawl@sha256:160abe08cb5b78cdd5d571e12d9dfb079292377850b018881b3ed13520127952`, from `57ca7f3` (run 42003313743), pulled anonymously.
   - orbit-cloud PR #7 now pins `ghcr.io/kar6677thik/sprawl-mcp@sha256:79b0b15e3aee836520a49f8527a32da1c17dd85c71a127211f3710796e5e1ed6`. The Orbit thread verified its attestation independently.
   - Deployer identity `sprawl-deployer` is applied, and GitHub secrets `KUBE_DEPLOYER_TOKEN` and `KUBE_CA` plus variable `MEGATRON_TAILNET_IP` are set. Automatic deployment is off until the Tailscale trust credential exists and `SPRAWL_DEPLOY` is `true` (§13).
+- **MCP released (5 Nov):**
+  - The Orbit thread released it from orbit-cloud `50a3d0d` (PR #7) with its bundle flow: Service `sprawl-mcp` at ClusterIP `10.43.48.120:80`, the GHCR image pulled anonymously.
+  - Public route: CNAME `canvas-mcp.karthiksurkanti.in` → tunnel `main`. A path-limited rule was inserted above the catch-all 404, with backup `config.yml.pre-sprawl-20261105-151844`. `ingress validate` passed, and `mcp.`/`auth.` routing is unchanged.
+  - Acceptance from the internet: metadata 200 with the exact `resource` and one authorization server; unauthenticated `POST /mcp` 401 with `resource_metadata`; `/health/*` and `/` 404; Slate MCP and Identity discovery unchanged.
 - **Pending:**
-  - the MCP catalog release: orbit-cloud PR #7 (spec with the digest) awaits the owner's merge. The Orbit thread then releases it with its bundle flow
-  - the tunnel rule (§6)
+  - the owner links Claude (§9)
   - the restic repository: the off-node job isn't applied until a repository is chosen; the API's nightly copies on the PVC are active
 
