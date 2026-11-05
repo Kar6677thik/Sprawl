@@ -24,6 +24,7 @@ button {
 button:hover:not(:disabled) { border-color: var(--border-strong); }
 button:disabled { opacity: 0.5; cursor: default; }
 button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+button.primary:disabled { opacity: 1; background: transparent; color: var(--text-faint); border-color: var(--border); }
 button.quiet { border-color: transparent; background: transparent; color: var(--text-muted); }
 button.quiet:hover { color: var(--text); }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
@@ -41,7 +42,9 @@ input::placeholder { color: var(--text-faint); }
 
 .empty { color: var(--text-muted); text-align: center; padding: 48px 16px; }
 .error { color: var(--danger); }
-.wordmark { font-size: 15px; font-weight: 650; letter-spacing: -0.02em; }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; letter-spacing: -0.02em; }
+.mark { flex: none; color: var(--text); }
+.mark .mark-node { fill: var(--accent); }
 
 /* ---- Bar ------------------------------------------------------------------------------------------------ */
 .bar {
@@ -56,6 +59,8 @@ input::placeholder { color: var(--text-faint); }
 .bar-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin-right: auto; }
 .bar-title h1 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-meta { color: var(--text-faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bar-hint { white-space: nowrap; }
+.bar > button { white-space: nowrap; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
 .live-dot.is-live { background: var(--tint-green); }
 
@@ -109,7 +114,7 @@ input::placeholder { color: var(--text-faint); }
 /* Zoomed out: each top-level region is a labelled miniature of its contents, the canvas's map. The label is sized in
    screen pixels (divided by the zoom) so it stays readable however far out you are. */
 .region.is-map { position: relative; overflow: hidden; }
-.mini { position: absolute; border-radius: 8px; background: var(--surface-2); }
+.mini { position: absolute; border-radius: 8px; background: color-mix(in oklch, var(--text) 9%, var(--surface)); }
 .mini-region { background: var(--region-sub); border-radius: 12px; }
 .region-label {
   position: absolute; inset: 0;
@@ -128,14 +133,13 @@ input::placeholder { color: var(--text-faint); }
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow);
   transition: border-color 120ms, box-shadow 120ms;
 }
 .card:hover { border-color: var(--border-strong); }
 .card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .card.is-key { border-color: var(--border-strong); }
 .card.is-key .card-title { font-weight: 650; }
-.card[data-tint] { box-shadow: inset 3px 0 0 var(--tint, transparent), var(--shadow); }
+.card[data-tint] { box-shadow: inset 3px 0 0 var(--tint, transparent); }
 .card.kind-question { border-style: dashed; }
 .card.is-bar { padding: 0; background: var(--surface-2); border-color: transparent; box-shadow: none; }
 .card-header { display: flex; align-items: flex-start; gap: 7px; }
@@ -145,17 +149,14 @@ input::placeholder { color: var(--text-faint); }
 .card-body p { margin: 0 0 6px; }
 .card-body ul, .card-body ol { margin: 0 0 6px; padding-left: 18px; }
 .card-body code { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
-.card-code { margin: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--text); white-space: pre; }
-.card-url { display: block; margin-bottom: 4px; color: var(--accent); text-decoration: none; font-size: 12px; }
+.card-code { margin: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--text); white-space: pre; tab-size: 2; overflow: hidden; }
+.card-url { display: block; flex: none; margin: 6px 0 -2px; color: var(--accent); text-decoration: none; font-size: 12px; }
 .card-url:hover { text-decoration: underline; }
-/* Bodies fade out at the bottom rather than ending mid-line. */
-.level-near .card::after {
-  content: ""; position: absolute; inset: auto 1px 1px 1px; height: 28px;
-  border-radius: 0 0 var(--radius) var(--radius);
-  background: linear-gradient(to bottom, transparent, var(--surface));
-  pointer-events: none;
-}
-.card.is-bar::after { display: none; }
+/* The mask is an overflow cue on text, not a fill.
+   A body longer than its card fades out over its last line rather than ending mid-line; the mask fades the text
+   itself, so it works on tinted, selected and code cards alike. */
+.card { display: flex; flex-direction: column; }
+.card-body { flex: 1; min-height: 0; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent); } /* taste-skill-ignore: overflow mask on text */
 
 [data-tint="grey"] { --tint: var(--tint-grey); }
 [data-tint="blue"] { --tint: var(--tint-blue); }
@@ -190,13 +191,23 @@ input::placeholder { color: var(--text-faint); }
 }
 .toast button { padding: 4px 10px; }
 
+/* Phone: the title keeps its room; meta and the keyboard hint go, the home search takes its own row. */
+@media (max-width: 640px) {
+  .bar { flex-wrap: wrap; height: auto; min-height: 52px; row-gap: 8px; padding: 8px 12px; }
+  .bar .search { order: 10; width: 100%; margin-left: 0; }
+  .home .bar .wordmark { margin-right: auto; }
+  .bar-meta, .bar-hint { display: none; }
+  .new-canvas { flex-wrap: wrap; }
+  .new-canvas input { flex-basis: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .flow .edge-text-link .react-flow__edge-path { stroke-dasharray: 1 4; stroke-linecap: round; stroke-width: 1.5; opacity: 0.8; }
 .canvas-meta .due { color: var(--accent); }
 .collection + .collection { margin-top: 24px; }
-.collection-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+.collection-title { margin: 0 0 6px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .collection-title span { font-weight: 500; margin-left: 4px; }
 .sketch { display: block; overflow: visible; color: var(--text); opacity: 0.85; }
 .sketch[data-tint] { color: var(--tint); }

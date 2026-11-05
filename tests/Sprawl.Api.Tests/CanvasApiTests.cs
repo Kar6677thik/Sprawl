@@ -98,7 +98,9 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
         var device = factory.Device();
         var created = await NewCanvas(device, "Review queue", Card("Open", "Why is the sky blue?", "q", CardKinds.Question), Card("Open", "Rayleigh", "n"));
         var queue = $"/api/v1/reviews?canvas={created.CanvasId}";
-        Assert.Equal(0, (await (await device.GetAsync(queue)).Read<ReviewQueue>()).DueCount);
+        var fresh = await (await device.GetAsync(queue)).Read<ReviewQueue>();
+        Assert.Equal(0, fresh.DueCount);
+        Assert.Equal(created.Refs["q"], Assert.Single(fresh.Upcoming).Card.Id); // not due yet, but listed as next
 
         factory.Clock.Advance(TimeSpan.FromDays(1.01));
         var due = await (await device.GetAsync(queue)).Read<ReviewQueue>();

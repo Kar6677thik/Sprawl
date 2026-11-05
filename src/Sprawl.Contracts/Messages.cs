@@ -169,7 +169,8 @@ public sealed record ReviewState(int Reps, double Ease, double IntervalDays, Dat
 
 public sealed record DueQuestion(string CanvasId, string CanvasTitle, CardRef Card, string Body, ReviewState Review);
 
-public sealed record ReviewQueue(int DueCount, IReadOnlyList<DueQuestion> Due);
+/// <param name="Upcoming">The next questions to come due (soonest first), so an empty queue still shows what is next.</param>
+public sealed record ReviewQueue(int DueCount, IReadOnlyList<DueQuestion> Due, IReadOnlyList<DueQuestion> Upcoming);
 
 public sealed record ReviewRequest(string Grade);
 

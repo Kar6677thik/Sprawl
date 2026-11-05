@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Mark } from "../theme/Mark";
 import { api } from "../api/client";
 import type { Session } from "../api/types";
 
@@ -28,7 +29,7 @@ export function SignIn({ session, onSignedIn }: { session: Session; onSignedIn: 
 
   return (
     <main className="sign-in">
-      <h1 className="wordmark">Sprawl</h1>
+      <h1 className="wordmark"><Mark />Sprawl</h1>
       {session.passwordSignIn && (
         <form onSubmit={submit} className="sign-in-form">
           <label>

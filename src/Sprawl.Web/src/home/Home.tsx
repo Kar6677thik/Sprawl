@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Mark } from "../theme/Mark";
 import { api } from "../api/client";
 import type { CanvasSummary } from "../api/types";
 import { navigate } from "../router";
@@ -68,7 +69,7 @@ export function Home({ onSignOut }: { onSignOut: () => void }) {
   return (
     <div className="home">
       <header className="bar">
-        <h1 className="wordmark">Sprawl</h1>
+        <h1 className="wordmark"><Mark />Sprawl</h1>
         <input className="search" type="search" placeholder="Filter canvases" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Filter canvases" />
         <ThemeButton />
         <button type="button" className="quiet" onClick={() => void api.signOut().then(onSignOut)}>Sign out</button>

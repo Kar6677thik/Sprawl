@@ -62,13 +62,13 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
             <KindGlyph kind={card.kind} />
             <h3 className="card-title">{card.title}</h3>
           </header>
+          {level === "near" && card.kind === "link" && card.url && (
+            <a className="card-url" href={card.url} target="_blank" rel="noopener noreferrer nofollow" onPointerDown={(e) => e.stopPropagation()}>
+              {safeHost(card.url)}
+            </a>
+          )}
           {level === "near" && (
             <div className="card-body">
-              {card.kind === "link" && card.url && (
-                <a className="card-url" href={card.url} target="_blank" rel="noopener noreferrer nofollow" onPointerDown={(e) => e.stopPropagation()}>
-                  {safeHost(card.url)}
-                </a>
-              )}
               {card.kind === "code" ? (
                 <pre className="card-code" data-language={card.language ?? undefined}><code>{card.body}</code></pre>
               ) : (

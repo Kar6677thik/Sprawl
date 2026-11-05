@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { DueQuestion, ReviewGrade } from "../api/types";
-import { Body } from "./parts";
+import { Body, KindGlyph } from "./parts";
+
+/** "in 3 h", "tomorrow", "in 5 days": when a question comes back. */
+function dueIn(iso: string): string {
+  const hours = (new Date(iso).getTime() - Date.now()) / 3_600_000;
+  if (hours < 1) return "within the hour";
+  if (hours < 20) return `in ${Math.round(hours)} h`;
+  const days = Math.round(hours / 24);
+  return days <= 1 ? "tomorrow" : `in ${days} days`;
+}
 
 interface Props {
   canvasId: string;
@@ -23,8 +32,9 @@ const GRADES: { grade: ReviewGrade; label: string; hint: string; key: string }[]
  */
 export function ReviewPanel({ canvasId, onOpen, onAsk, onClose }: Props) {
   const [queue, setQueue] = useState<DueQuestion[] | null>(null);
+  const [upcoming, setUpcoming] = useState<DueQuestion[]>([]);
   const [done, setDone] = useState(0);
-  useEffect(() => { api.reviews(canvasId).then((q) => setQueue(q.due), () => setQueue([])); }, [canvasId]);
+  useEffect(() => { api.reviews(canvasId).then((q) => { setQueue(q.due); setUpcoming(q.upcoming); }, () => setQueue([])); }, [canvasId]);
   const current = queue?.[0];
 
   const grade = useCallback((value: ReviewGrade) => {
@@ -56,10 +66,24 @@ export function ReviewPanel({ canvasId, onOpen, onAsk, onClose }: Props) {
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>
       </header>
       {!queue ? <p className="panel-empty">Loading…</p> : !current ? (
-        <p className="panel-empty">
-          {done > 0 ? `Done: ${done} reviewed. ` : "No open questions are due. "}
-          A question comes due a day after it is written, then at growing intervals.
-        </p>
+        <div className="panel-body">
+          <p className="review-done">{done > 0 ? `Done: ${done} reviewed. Nothing else is due.` : "Nothing is due. A question comes due a day after it is written, then at growing intervals."}</p>
+          {upcoming.length > 0 && (
+            <section className="panel-section">
+              <h4>Coming up</h4>
+              <ul className="refs">
+                {upcoming.map((item) => (
+                  <li key={item.card.id}>
+                    <KindGlyph kind="question" />
+                    <button type="button" className="link-button" onClick={() => onOpen(item.card.id)} title={item.card.regionTitle ?? "Loose card"}>{item.card.title}</button>
+                    <span className="ref-detail"><time dateTime={item.review.dueAt}>{dueIn(item.review.dueAt)}</time></span>
+                    <span />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       ) : (
         <div className="panel-body">
           <p className="review-where">{current.card.regionTitle ?? "Loose card"} · {current.review.reps === 0 ? "first review" : `reviewed ${current.review.reps}×`}</p>

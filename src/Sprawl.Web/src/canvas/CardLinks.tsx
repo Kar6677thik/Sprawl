@@ -38,9 +38,6 @@ export function CardLinks({ doc, card, write, onFocus, onTag }: Props) {
 
   return (
     <>
-      {context.tags.length > 0 && (
-        <div className="tag-row">{context.tags.map((tag) => <button key={tag} type="button" className="tag-chip" onClick={() => onTag(tag)}>#{tag}</button>)}</div>
-      )}
       {(context.links.length > 0 || context.unresolvedLinks.length > 0 || context.crossLinks.length > 0) && (
         <Section title="Links to">
           {context.links.map((ref) => <Row key={ref.id} item={ref} onFocus={onFocus} />)}

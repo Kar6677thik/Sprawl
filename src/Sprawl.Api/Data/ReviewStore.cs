@@ -18,16 +18,17 @@ public sealed class ReviewStore(Database database, CanvasStore canvases, TimePro
             "WHERE c.kind = 'question' AND v.deleted_at IS NULL AND v.archived = 0 AND ($canvas IS NULL OR c.canvas_id = $canvas)", ("$canvas", canvasId));
         var now = clock.GetUtcNow();
         var due = new List<DueQuestion>();
+        var upcoming = new List<DueQuestion>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             var review = State(reader, 8, reader.Time(7));
-            if (review.DueAt > now) continue;
             var card = new CardRef(reader.GetString(0), reader.GetString(3), CardKinds.Question, reader.NullableString(4), reader.NullableString(5));
-            due.Add(new(reader.GetString(1), reader.GetString(2), card, reader.GetString(6), review));
+            (review.DueAt > now ? upcoming : due).Add(new(reader.GetString(1), reader.GetString(2), card, reader.GetString(6), review));
         }
         var ordered = due.OrderBy(d => d.Review.DueAt).ThenBy(d => d.Card.Id, StringComparer.Ordinal).ToList();
-        return new(ordered.Count, [.. ordered.Take(Math.Clamp(limit, 1, 100))]);
+        var next = upcoming.OrderBy(d => d.Review.DueAt).ThenBy(d => d.Card.Id, StringComparer.Ordinal).Take(5);
+        return new(ordered.Count, [.. ordered.Take(Math.Clamp(limit, 1, 100))], [.. next]);
     }
 
     public async Task<ReviewResult> Grade(string cardId, string grade, CancellationToken cancellationToken)

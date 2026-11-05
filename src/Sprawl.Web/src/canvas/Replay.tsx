@@ -66,7 +66,11 @@ export function Replay({ canvasId, latest, onState, onRestore, onExit }: Props) 
   return (
     <div className="replay" role="group" aria-label="History replay">
       <button type="button" className="icon-button" aria-label={playing ? "Pause" : "Play"}
-        onClick={() => { if (!playing && version >= latest) setVersion(1); setPlaying(!playing); }}>{playing ? "❚❚" : "▶"}</button>
+        onClick={() => { if (!playing && version >= latest) setVersion(1); setPlaying(!playing); }}>
+        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+          {playing ? <path d="M3 2h2v8H3zM7 2h2v8H7z" fill="currentColor" /> : <path d="M3 1.5v9l7.5-4.5z" fill="currentColor" />}
+        </svg>
+      </button>
       <input type="range" min={1} max={latest} value={version} aria-label="Version"
         onChange={(e) => { setPlaying(false); setVersion(Number(e.target.value)); }} />
       <span className="replay-version">v{version} / {latest}</span>

@@ -251,6 +251,7 @@ export interface DueQuestion {
 export interface ReviewQueue {
   dueCount: number;
   due: DueQuestion[];
+  upcoming: DueQuestion[];
 }
 
 export interface CardRef {
