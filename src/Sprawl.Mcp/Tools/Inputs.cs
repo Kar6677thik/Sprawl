@@ -15,6 +15,7 @@ public enum CardKind
     [JsonStringEnumMemberName("mermaid")] Mermaid,
     [JsonStringEnumMemberName("table")] Table,
     [JsonStringEnumMemberName("chart")] Chart,
+    [JsonStringEnumMemberName("widget")] Widget,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ConnectionKind>))]
@@ -133,7 +134,7 @@ public sealed record RegionInput(
 
 public sealed record CardInput(
     [property: Description("Region for the card: a ref from this call, a region id, or a region title. A new title creates the region.")] string Region,
-    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet; mermaid: a rendered Mermaid diagram of any type (the body is the source; add_diagram is usually simpler); table: a markdown table (comparisons, trade-offs, cheat sheets), shown as wide as it needs; chart: a Vega-Lite JSON spec with inline data.values (bar, line, area, point, arc…), no URLs.")] CardKind Kind,
+    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet; mermaid: a rendered Mermaid diagram of any type (the body is the source; add_diagram is usually simpler); table: a markdown table (comparisons, trade-offs, cheat sheets), shown as wide as it needs; chart: a Vega-Lite JSON spec with inline data.values (bar, line, area, point, arc…), no URLs; widget: an interactive explorable (self-contained HTML, CSS and inline JS: sliders, toggles, a small simulation; optional first line <!-- size: 640x420 -->), run sandboxed with no network.")] CardKind Kind,
     [property: Description("Card title, 1-120 characters. One idea per card.")] string Title,
     [property: Description("Markdown body. Keep it short (under ~600 characters) except for notes and code. Max 8000 (16000 for code).")] string? Body = null,
     [property: Description("Optional temporary id for this call (e.g. \"c1\"), for connections to cards created in the same call.")] string? Ref = null,
@@ -204,6 +205,7 @@ internal static class Map
         CardKind.Mermaid => CardKinds.Mermaid,
         CardKind.Table => CardKinds.Table,
         CardKind.Chart => CardKinds.Chart,
+        CardKind.Widget => CardKinds.Widget,
         _ => CardKinds.Code
     };
 

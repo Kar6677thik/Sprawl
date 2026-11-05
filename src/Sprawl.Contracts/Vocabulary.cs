@@ -13,7 +13,9 @@ public static class CardKinds
     public const string Table = "table";
     /// <summary>A chart: the body is a Vega-Lite JSON spec with inline data.</summary>
     public const string Chart = "chart";
-    public static readonly string[] All = [Idea, Note, Question, Link, Code, Mermaid, Table, Chart];
+    /// <summary>An interactive explorable: self-contained HTML/CSS/JS run in a sandboxed frame with no network and no access to Sprawl.</summary>
+    public const string Widget = "widget";
+    public static readonly string[] All = [Idea, Note, Question, Link, Code, Mermaid, Table, Chart, Widget];
 }
 
 public static class ConnectionKinds

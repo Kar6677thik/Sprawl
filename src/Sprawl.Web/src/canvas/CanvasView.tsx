@@ -75,6 +75,8 @@ function Flow({ canvas, initialFocus }: Props) {
   const [shortcuts, setShortcuts] = useState(false);
   const [presenting, setPresenting] = useState<number | null>(null);
   const [walking, setWalking] = useState<{ id: string; step: number } | null>(null);
+  const [quiz, setQuiz] = useState<{ regionId: string; revealed: ReadonlySet<string> } | null>(null);
+  const [sketch, setSketch] = useState(() => localStorage.getItem("sprawl.sketch") === "1");
   const [ink, setInk] = useState<{ tint: InkTint; width: number } | null>(null);
   const [mermaidDraft, setMermaidDraft] = useState<(MermaidDraft & { near?: string }) | null>(null);
   const dragging = useRef(false);
@@ -181,12 +183,6 @@ function Flow({ canvas, initialFocus }: Props) {
     void canvas.move(items);
   }, [canvas, doc, flow]);
 
-  const onNodeClick = useCallback((_event: unknown, node: Node) => {
-    if (!connectFrom || replaying || node.id.startsWith("sk_")) return;
-    if (node.id !== connectFrom) void canvas.write([{ type: "connect", from: connectFrom, to: node.id }], [connectFrom, node.id]);
-    setConnectFrom(null);
-  }, [canvas, connectFrom, replaying]);
-
   // Double-click zooms into a card's detail when it has one (Enter still opens its panel); otherwise it opens the card.
   const onNodeDoubleClick = useCallback((_event: unknown, node: Node) => {
     const detail = doc.cards.find((c) => c.id === node.id)?.detail;
@@ -287,13 +283,31 @@ function Flow({ canvas, initialFocus }: Props) {
   const walkRegions = useMemo(() => new Set(walkthroughs.map((w) => w.regionId)), [walkthroughs]);
   const active = walking ? walkthroughs.find((w) => w.id === walking.id) ?? null : null;
   const lit = useMemo(() => active && walking ? litFor(doc, active.steps[walking.step]?.highlight ?? []) : null, [active, doc, walking]);
-  const shownNodes = useMemo(() => !lit ? nodes : nodes.map((node) => {
+  const quizzed = useMemo(() => {
+    if (!quiz) return null;
+    const inside = new Set([quiz.regionId, ...doc.regions.filter((r) => r.parentId === quiz.regionId).map((r) => r.id)]);
+    return new Set(doc.cards.filter((c) => c.regionId && inside.has(c.regionId)).map((c) => c.id));
+  }, [doc.cards, doc.regions, quiz]);
+  const quizNodes = useMemo(() => !quizzed || !quiz ? nodes : nodes.map((node) => quizzed.has(node.id)
+    ? { ...node, className: `${node.className ?? ""} ${quiz.revealed.has(node.id) ? "is-revealed" : "is-hidden"}` } : node), [nodes, quiz, quizzed]);
+  const shownNodes = useMemo(() => !lit ? quizNodes : quizNodes.map((node) => {
     if (node.type === "region") return lit.nodes.has(node.id) ? { ...node, className: `${node.className ?? ""} is-lit` } : node;
     return { ...node, className: `${node.className ?? ""} ${lit.nodes.has(node.id) ? "is-lit" : "is-dim"}` };
-  }), [lit, nodes]);
-  const shownEdges = useMemo(() => !lit ? edges : edges.map((edge) => lit.edges.has(edge.id)
+  }), [lit, quizNodes]);
+  const quizEdges = useMemo(() => !quizzed ? edges : edges.map((edge) => quizzed.has(edge.source) && quizzed.has(edge.target)
+    ? { ...edge, className: `${edge.className ?? ""} is-quiz` } : edge), [edges, quizzed]);
+  const shownEdges = useMemo(() => !lit ? quizEdges : quizEdges.map((edge) => lit.edges.has(edge.id)
     ? { ...edge, animated: true, className: `${edge.className ?? ""} is-lit` }
-    : { ...edge, className: `${edge.className ?? ""} is-dim` }), [edges, lit]);
+    : { ...edge, className: `${edge.className ?? ""} is-dim` }), [lit, quizEdges]);
+
+  const toggleSketch = useCallback(() => setSketch((on) => { localStorage.setItem("sprawl.sketch", on ? "0" : "1"); return !on; }), []);
+
+  const onNodeClick = useCallback((_event: unknown, node: Node) => {
+    if (quiz && quizzed?.has(node.id)) { setQuiz({ ...quiz, revealed: new Set([...quiz.revealed, node.id]) }); return; }
+    if (!connectFrom || replaying || node.id.startsWith("sk_")) return;
+    if (node.id !== connectFrom) void canvas.write([{ type: "connect", from: connectFrom, to: node.id }], [connectFrom, node.id]);
+    setConnectFrom(null);
+  }, [canvas, connectFrom, quiz, quizzed, replaying]);
 
   /** Frame what the step lights up (or the whole region when it lights nothing). */
   const frameStep = useCallback((walkthroughId: string, step: number) => {
@@ -401,6 +415,15 @@ function Flow({ canvas, initialFocus }: Props) {
     return id ? doc.regions.find((r) => r.id === id) ?? null : null;
   }, [doc.cards, doc.regions, selection]);
 
+  const startQuiz = useCallback(() => {
+    const region = selectedRegion();
+    if (!region) { canvas.say("Select a region (or a card in it) to be quizzed on."); return; }
+    setPanel(null);
+    setWalking(null);
+    setQuiz({ regionId: region.id, revealed: new Set() });
+    focus(region.id);
+  }, [canvas, focus, selectedRegion]);
+
   const setLayout = useCallback((layout: RegionLayout) => {
     const region = selectedRegion();
     if (!region) { canvas.say("Select a region (or a card in it) first."); return; }
@@ -475,6 +498,8 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "layout-cards", group: "Diagrams", label: "Turn selected diagram back into cards", run: () => setLayout("cards") },
     ...walkthroughs.map((w) => ({ id: `walk:${w.id}`, group: "Walkthroughs", label: `Play: ${w.title}`, hint: `${doc.regions.find((r) => r.id === w.regionId)?.title ?? ""} · ${w.steps.length} steps`, run: () => walk(w.id) })),
     ...walkthroughs.map((w) => ({ id: `walk-delete:${w.id}`, group: "Walkthroughs", label: `Delete walkthrough: ${w.title}`, run: () => void canvas.write([{ type: "deleteWalkthrough", id: w.id }], [w.id]) })),
+    { id: "quiz", group: "Learn", label: "Quiz me on the selected region", hint: "labels hidden; click to check", keys: "Q", run: startQuiz },
+    { id: "sketch", group: "Actions", label: sketch ? "Clean style" : "Sketch style", hint: "hand-drawn look", run: toggleSketch },
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -486,13 +511,14 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, doc.meta.id, doc.regions, walk, walkthroughs, download, editMermaid, exportPng, flow, openPalette, present, saved, selectedRegion, setLayout, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, doc.regions, sketch, startQuiz, toggleSketch, walk, walkthroughs, download, editMermaid, exportPng, flow, openPalette, present, saved, selectedRegion, setLayout, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key;
       if (replaying) return; // Replay owns the keyboard; nothing may edit a past state.
+      if (quiz && !mod && key === "Escape") { event.preventDefault(); setQuiz(null); return; }
       if (walking && active && !mod) {
         const moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, Enter: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
         if (key === "Escape") { event.preventDefault(); walk(null); return; }
@@ -538,6 +564,7 @@ function Flow({ canvas, initialFocus }: Props) {
         case "/": event.preventDefault(); openPalette("canvas"); return;
         case "#": event.preventDefault(); openPalette("canvas", "#"); return;
         case "p": present(0); return;
+        case "q": startQuiz(); return;
         case "w": {
           const region = selectedRegion();
           const target = (region && walkthroughs.find((w) => w.regionId === region.id || w.regionId === region.parentId)) ?? walkthroughs[0];
@@ -565,7 +592,7 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, mermaidDraft, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selectedRegion, selection, walking, active, walk, walkthroughs, shortcuts, startCard, steps.length, tidySelection]);
+  }, [canvas, composing, mermaidDraft, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selectedRegion, selection, walking, active, walk, walkthroughs, quiz, startQuiz, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
@@ -574,7 +601,7 @@ function Flow({ canvas, initialFocus }: Props) {
       <LinkContext.Provider value={linkActions}>
       <WalkthroughContext.Provider value={walkContext}>
       <DetailContext.Provider value={detailContext}>
-      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}${walking ? " is-walking" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
+      <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}${walking ? " is-walking" : ""}${quiz ? " is-quizzing" : ""}${sketch ? " is-sketch" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
           nodes={shownNodes}
           edges={shownEdges}
@@ -604,6 +631,11 @@ function Flow({ canvas, initialFocus }: Props) {
           zIndexMode="manual"
         >
           <Background gap={24} size={1} />
+          <svg width="0" height="0" className="sketch-defs" aria-hidden="true">
+            <filter id="sketch-filter"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" /><feDisplacementMap in="SourceGraphic" scale="2.6" /></filter>
+            {/* Straight lines have an empty bounding box, so their filter region is set in user space instead. */}
+            <filter id="sketch-line" filterUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" /><feDisplacementMap in="SourceGraphic" scale="2.6" /></filter>
+          </svg>
           <ZoomTracker onLevel={setLevel} />
         </ReactFlow>
         {ink && !replaying && <DrawLayer tint={ink.tint} width={ink.width} onStroke={addStroke} />}
@@ -621,6 +653,15 @@ function Flow({ canvas, initialFocus }: Props) {
         {replaying && canvas.doc && (
           <Replay canvasId={canvas.doc.meta.id} latest={canvas.doc.version} onState={setPastDoc}
             onRestore={(v) => { setReplaying(false); void canvas.revertTo(v); }} onExit={() => setReplaying(false)} />
+        )}
+        {quiz && quizzed && (
+          <div className="presenter quiz-bar" role="status">
+            <span className="presenter-title">Quiz · {doc.regions.find((r) => r.id === quiz.regionId)?.title}</span>
+            <span className="presenter-count">Name each one, then click it to check · {quiz.revealed.size} / {quizzed.size}</span>
+            <button type="button" className="quiet small" onClick={() => setQuiz({ ...quiz, revealed: new Set() })}>Hide all</button>
+            <button type="button" className="quiet small" onClick={() => setQuiz({ ...quiz, revealed: new Set(quizzed) })}>Reveal all</button>
+            <button type="button" className="quiet small" onClick={() => setQuiz(null)}>Done <kbd>Esc</kbd></button>
+          </div>
         )}
         {active && walking && (
           <WalkthroughPlayer walkthrough={active} step={walking.step} regionTitle={doc.regions.find((r) => r.id === active.regionId)?.title ?? ""}

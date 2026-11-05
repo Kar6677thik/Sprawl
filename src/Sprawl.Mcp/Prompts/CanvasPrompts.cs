@@ -114,6 +114,49 @@ public sealed class CanvasPrompts
         Read a diagram with get_diagram before changing it; redraw it with add_diagram replace=true, passing expectedVersion.
         """;
 
+    [McpServerPrompt(Name = "teach_me", Title = "Teach me a topic")]
+    [Description("Teach a topic step by step on a canvas, checking understanding as you go instead of explaining everything at once.")]
+    public static string TeachMe(
+        [Description("The topic, e.g. \"virtual functions in C++\".")] string topic,
+        [Description("Optional: the canvas id (cv_…) or title to teach on.")] string? canvas = null,
+        [Description("Optional: what the learner already knows.")] string? level = null)
+    {
+        var where = string.IsNullOrWhiteSpace(canvas) ? "a Sprawl canvas for it (find one with list_canvases, or create one)" : "the Sprawl canvas \"" + canvas + "\"";
+        var known = string.IsNullOrWhiteSpace(level) ? "" : " The learner says they know: " + level + ".";
+        return $"""
+            Teach "{topic}" on {where}.{known}
+            Work in short rounds, not one long lecture:
+            1. Ask one question to find out what the learner already thinks about the topic. Wait for the answer.
+            2. Add the next idea to the canvas (one region per stage): a short card or two, plus the picture that makes it click (add_diagram with a
+               walkthrough, a table for comparisons, a chart for numbers, or a widget when it is easier to feel by playing with a parameter).
+               Show the diagram with show_diagram.
+            3. Ask the learner to predict or explain something about it before you do (a cognitive gate: the answer is withheld until they try).
+            4. Correct gently, then add a question card for anything they got wrong, so it comes back in their review queue.
+            Repeat until the topic is covered, advanced cases included. Finish with a mind map (add_diagram, mindmap) of everything covered.
+            """;
+    }
+
+    [McpServerPrompt(Name = "quiz_me", Title = "Quiz me (mock interview)")]
+    [Description("Quiz the learner from a canvas, one question at a time, grading answers against the cards and recording weak spots.")]
+    public static string QuizMe(
+        [Description("The canvas id (cv_…) or title.")] string canvas,
+        [Description("Optional: limit to one region (title or id).")] string? region = null,
+        [Description("Optional: how many questions (default 10).")] int? count = null)
+    {
+        var scope = string.IsNullOrWhiteSpace(region) ? "" : " (region \"" + region + "\")";
+        return $"""
+            Run a mock interview from the Sprawl canvas "{canvas}"{scope}, {count ?? 10} questions.
+            1. Read it with get_canvas (depth=full for the region you quiz on). Prefer its question cards; otherwise turn its key ideas into questions
+               an interviewer would really ask, from easy to hard.
+            2. Ask one question at a time. Never show the answer before the learner replies.
+            3. Grade each reply against the cards: what was right, what was missing, the crisp interview answer. If the answer needs a picture, show the
+               relevant diagram with show_diagram.
+            4. For every miss, add a question card with the exact question (and a note card with the model answer, connected question -leads-to-> note)
+               to an "Interview misses" region, so it comes back in the learner's review queue.
+            End with a score, the three weakest areas, and which regions to revisit.
+            """;
+    }
+
     [McpServerPrompt(Name = "synthesize_region", Title = "Synthesize a region")]
     [Description("Distil a region into one key summary card, linked to the cards it draws on.")]
     public static string SynthesizeRegion(

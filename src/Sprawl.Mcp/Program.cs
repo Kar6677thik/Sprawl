@@ -240,6 +240,10 @@ namespace Sprawl.Mcp
               processes, next to the cards that explain them, so a canvas holds both the ideas and the pictures of how they fit.
             - Depth: add_diagram detailOf=<card id> makes a diagram the inside of a shape (overview → detail, as in the C4 model). Tables (kind table,
               markdown) suit comparisons and cheat sheets; charts (kind chart, Vega-Lite with inline data) suit numbers. Both render as wide as needed.
+            - Explorables: a widget card (kind widget) is self-contained HTML/CSS/inline JS the owner can play with: change a parameter and watch the
+              effect (a hash table resizing, a cache hit rate, an animation of an algorithm). It runs sandboxed, with no network and no access to
+              Sprawl; use CSS variables --text, --muted, --accent, --border, --surface for colours. One widget per idea that is easier to feel than read.
+            - Teaching: the teach_me and quiz_me prompts turn a canvas into a lesson or a mock interview.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.
             - Batch related additions into one add_to_canvas call, with refs for cross-references and a requestId so a retry is not applied twice.

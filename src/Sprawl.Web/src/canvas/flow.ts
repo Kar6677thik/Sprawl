@@ -6,7 +6,7 @@ import type { ZoomLevel } from "./zoom";
 /** A descendant's rectangle relative to its top-level region, drawn as the zoomed-out miniature. */
 export type MiniBox = { id: string; x: number; y: number; w: number; h: number; kind: "card" | "region" };
 export type RegionNodeData = { region: Region; cardCount: number; minis: MiniBox[]; group: boolean };
-export type CardNodeData = { card: Card; fresh: boolean; diagram: boolean };
+export type CardNodeData = { card: Card; fresh: boolean; diagram: boolean; canvasId: string };
 export type RegionNode = Node<RegionNodeData, "region">;
 export type CardNode = Node<CardNodeData, "card">;
 export type SketchNode = Node<{ sketch: Sketch }, "sketch">;
@@ -45,7 +45,7 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
     width: card.w,
     height: card.h,
     ...(card.regionId ? { parentId: card.regionId } : {}),
-    data: { card, fresh: fresh.has(card.id), diagram: card.regionId !== null && isDiagram(byId.get(card.regionId)?.layout) },
+    data: { card, fresh: fresh.has(card.id), diagram: card.regionId !== null && isDiagram(byId.get(card.regionId)?.layout), canvasId: doc.meta.id },
     zIndex: 3,
     hidden: far && card.regionId !== null,
   }));

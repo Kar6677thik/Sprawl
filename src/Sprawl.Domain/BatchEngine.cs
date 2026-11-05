@@ -656,12 +656,13 @@ public sealed partial class BatchEngine
     {
         if (card.SizeSource == Placements.Manual) return card;
         var inDiagram = card.RegionId is { } r && state.Regions.TryGetValue(r, out var region) && RegionLayouts.IsDiagram(region.Layout);
-        if (card.Kind is CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart)
+        if (card.Kind is CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart or CardKinds.Widget)
         {
             var (cw, ch) = card.Kind switch
             {
                 CardKinds.Table => ContentGeometry.Table(card.Body),
                 CardKinds.Chart => ContentGeometry.Chart(card.Body),
+                CardKinds.Widget => ContentGeometry.Widget(card.Body),
                 _ => MermaidGeometry.Size(card.Body)
             };
             if (inDiagram) return card with { Size = CardSizes.Tall, W = cw, H = ch };
@@ -931,7 +932,7 @@ public static partial class Text
     public static string Body(string? value, string kind)
     {
         var body = (value ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
-        var max = kind is CardKinds.Code or CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart ? Limits.CodeBody : Limits.CardBody;
+        var max = kind is CardKinds.Code or CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart or CardKinds.Widget ? Limits.CodeBody : Limits.CardBody;
         if (body.Length > max) throw SprawlException.Limit($"A {kind} card body is at most {max} characters.");
         return kind == CardKinds.Chart ? ContentGeometry.ValidateChart(body) : body;
     }

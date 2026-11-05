@@ -141,6 +141,7 @@ app.MapGet("/health/ready", async (Database database, CancellationToken ct) =>
 
 app.MapSessions(app.Environment);
 app.MapCanvases();
+app.MapWidgets();
 app.MapFallback("/api/{**path}", () => Results.Problem(statusCode: 404, detail: "No such API route.",
     extensions: new Dictionary<string, object?> { ["code"] = ErrorCodes.NotFound })).AllowAnonymous();
 

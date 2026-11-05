@@ -6,6 +6,7 @@ import { Body, KindGlyph } from "./parts";
 import { shapeOutline } from "./shapes";
 import { MermaidView } from "./MermaidView";
 import { ChartView } from "./ChartView";
+import { currentTheme } from "./MermaidView";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
 
@@ -112,11 +113,21 @@ function PlayButton({ regionId }: { regionId: string }) {
   );
 }
 
+/**
+ * A widget runs as its own document in a sandboxed frame: scripts may run, but without allow-same-origin the frame is an
+ * opaque origin with no access to Sprawl's cookies, storage or API, and the server's policy for it allows no network at all.
+ * nodrag/nowheel let the owner use its controls without moving the canvas.
+ */
+function WidgetFrame({ canvasId, card }: { canvasId: string; card: CardNode["data"]["card"] }) {
+  const src = `/api/v1/canvases/${encodeURIComponent(canvasId)}/cards/${encodeURIComponent(card.id)}/widget?theme=${currentTheme()}&v=${encodeURIComponent(card.updatedAt)}`;
+  return <iframe className="widget-frame nodrag nowheel nopan" title={card.title} src={src} sandbox="allow-scripts" referrerPolicy="no-referrer" loading="lazy" />;
+}
+
 export const CardView = memo(function CardView({ data, selected }: NodeProps<CardNode>) {
-  const { card, fresh, diagram } = data;
+  const { card, fresh, diagram, canvasId } = data;
   const level = useContext(ZoomLevelContext);
   // Rendered content (a diagram, chart or table) is shown from the titles zoom on, resizable by the owner when selected.
-  if ((card.kind === "mermaid" || card.kind === "chart" || card.kind === "table") && level !== "far") {
+  if ((card.kind === "mermaid" || card.kind === "chart" || card.kind === "table" || card.kind === "widget") && level !== "far") {
     return (
       <article className={`card kind-${card.kind} is-content${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`} data-tint={card.tint ?? undefined} aria-label={card.title}>
         <DetailBadge regionId={card.detail} />
@@ -128,7 +139,10 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
           <h3 className="card-title">{card.title}</h3>
         </header>
         <div className="card-mermaid">
-          {card.kind === "mermaid" ? <MermaidView source={card.body} /> : card.kind === "chart" ? <ChartView spec={card.body} /> : <div className="card-table"><Body markdown={card.body} /></div>}
+          {card.kind === "mermaid" ? <MermaidView source={card.body} />
+            : card.kind === "chart" ? <ChartView spec={card.body} />
+            : card.kind === "widget" ? <WidgetFrame canvasId={canvasId} card={card} />
+            : <div className="card-table"><Body markdown={card.body} /></div>}
         </div>
       </article>
     );

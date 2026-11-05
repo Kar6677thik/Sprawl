@@ -6,7 +6,7 @@ import { ChartView } from "./ChartView";
 import { CardLinks } from "./CardLinks";
 import { Body, KindGlyph } from "./parts";
 
-const KINDS: CardKind[] = ["idea", "note", "question", "link", "code", "mermaid", "table", "chart"];
+const KINDS: CardKind[] = ["idea", "note", "question", "link", "code", "mermaid", "table", "chart", "widget"];
 const CONNECTION_KINDS: ConnectionKind[] = ["relates", "leads-to", "contradicts", "example-of", "depends-on"];
 const LINES: LineStyle[] = ["solid", "dashed", "dotted", "thick"];
 const ENDS: [Ends, string][] = [["end", "→"], ["start", "←"], ["both", "↔"], ["none", "—"]];
@@ -97,10 +97,10 @@ function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "
           <input value={url} placeholder="https://…" onFocus={() => { focused.current = "url"; }} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} />
         </label>}
         <div className="field">
-          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : card.kind === "mermaid" ? "Mermaid source" : card.kind === "chart" ? "Vega-Lite spec (JSON, inline data)" : card.kind === "table" ? "Table (markdown)" : "Notes"} {card.kind !== "mermaid" && card.kind !== "chart" && <em>(markdown · [[Card]] links · #tags)</em>}</span>
+          <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : card.kind === "mermaid" ? "Mermaid source" : card.kind === "chart" ? "Vega-Lite spec (JSON, inline data)" : card.kind === "table" ? "Table (markdown)" : card.kind === "widget" ? "Widget (HTML, CSS, inline JS; runs sandboxed)" : "Notes"} {card.kind !== "mermaid" && card.kind !== "chart" && card.kind !== "widget" && <em>(markdown · [[Card]] links · #tags)</em>}</span>
           {editingBody || card.body.length === 0 ? (
             <textarea
-              className={card.kind === "code" || card.kind === "mermaid" || card.kind === "chart" || card.kind === "table" ? "is-code" : ""} rows={card.kind === "mermaid" || card.kind === "chart" ? 16 : 10} value={body} autoFocus={editingBody} aria-label="Body"
+              className={card.kind === "code" || card.kind === "mermaid" || card.kind === "chart" || card.kind === "table" || card.kind === "widget" ? "is-code" : ""} rows={card.kind === "mermaid" || card.kind === "chart" || card.kind === "widget" ? 16 : 10} value={body} autoFocus={editingBody} aria-label="Body"
               onFocus={() => { focused.current = "body"; setEditingBody(true); }} onChange={(e) => setBody(e.target.value)} onBlur={saveBody}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) e.currentTarget.blur(); if (e.key === "Escape") { setBody(card.body); e.currentTarget.blur(); } }}
             />

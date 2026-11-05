@@ -51,6 +51,14 @@ public static class ContentGeometry
         return (Round(Math.Clamp(w + 100, Geometry.CardWidth, 1400)), Round(Math.Clamp(h + 110, 200, 1400)));
     }
 
+    /// <summary>A widget's size: from a leading <c>&lt;!-- size: 640x420 --&gt;</c> comment, else 576 × 400.</summary>
+    public static (int W, int H) Widget(string body)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(body, @"^\s*<!--\s*size:\s*(\d{2,4})\s*x\s*(\d{2,4})\s*-->", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(100));
+        var (w, h) = match.Success ? (int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture)) : (576, 400);
+        return (Round(Math.Clamp(w, Geometry.CardWidth, 1400)), Round(Math.Clamp(h + 48, 160, 1400)));
+    }
+
     /// <summary>
     /// A chart body must be one Vega-Lite JSON object with its data inline: any <c>url</c> is refused, so a chart never
     /// fetches anything (the page's CSP would block it anyway) and what it shows is exactly what is stored.

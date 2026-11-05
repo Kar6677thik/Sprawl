@@ -1,6 +1,6 @@
 // Mirrors src/Sprawl.Contracts (camelCase JSON). Keep in step with the C# records.
 
-export type CardKind = "idea" | "note" | "question" | "link" | "code" | "mermaid" | "table" | "chart";
+export type CardKind = "idea" | "note" | "question" | "link" | "code" | "mermaid" | "table" | "chart" | "widget";
 export type ConnectionKind = "relates" | "leads-to" | "contradicts" | "example-of" | "depends-on";
 export type Placement = "auto" | "manual";
 export type Author = "human" | "ai";

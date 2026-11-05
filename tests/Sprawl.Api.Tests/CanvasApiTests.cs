@@ -241,6 +241,33 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Widgets_are_served_sandboxed_to_the_owner_only()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Widgets",
+            new AddCardIntent(CardKinds.Widget, "Load factor", "R", "w", "<!-- size: 600x360 -->\n<input type=range id=n><script>document.title='x'</script>"),
+            new AddCardIntent(CardKinds.Note, "Plain", "R", "n"));
+        var path = $"/api/v1/canvases/{created.CanvasId}/cards/{created.Refs["w"]}/widget";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await device.GetAsync(path)).StatusCode);
+        var owner = await factory.Owner();
+        var response = await owner.GetAsync(path + "?theme=dark");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+        var csp = response.Headers.GetValues("Content-Security-Policy").Single();
+        Assert.Contains("connect-src 'none'", csp);
+        Assert.Contains("frame-ancestors 'self'", csp);
+        Assert.Equal("SAMEORIGIN", response.Headers.GetValues("X-Frame-Options").Single());
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.StartsWith("<!doctype html><html lang=\"en\" class=\"dark\">", html);
+        Assert.Contains("<input type=range id=n>", html);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.GetAsync($"/api/v1/canvases/{created.CanvasId}/cards/{created.Refs["n"]}/widget")).StatusCode);
+        var document = await (await owner.GetAsync($"/api/v1/canvases/{created.CanvasId}")).Read<CanvasDocument>();
+        Assert.True(document.Cards.Single(c => c.Id == created.Refs["w"]).W >= 576);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

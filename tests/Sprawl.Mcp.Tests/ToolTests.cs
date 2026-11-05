@@ -53,7 +53,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         }
         // Coordinates are never part of any input schema: Claude cannot place things by position.
         Assert.DoesNotContain("\"x\"", body.ToString());
-        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\",\"mermaid\",\"table\",\"chart\"]", body.ToString().Replace(" ", ""));
+        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\",\"mermaid\",\"table\",\"chart\",\"widget\"]", body.ToString().Replace(" ", ""));
         Assert.Contains("get_canvas", tools["add_to_canvas"].GetProperty("description").GetString());
     }
 
@@ -62,7 +62,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["answer_questions", "expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region", "triage_inbox", "visualize"], names);
+        Assert.Equal(["answer_questions", "expand_region", "find_gaps", "quiz_me", "review_canvas", "seed_canvas", "synthesize_region", "teach_me", "triage_inbox", "visualize"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",

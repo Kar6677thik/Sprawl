@@ -301,3 +301,28 @@ input::placeholder { color: var(--text-faint); }
 .detail-back:hover { color: var(--text); }
 .region-header .detail-back + .region-play, .region-header .detail-back { margin-left: auto; }
 .region-header .detail-back + .region-play { margin-left: 6px; }
+
+/* Widgets: a sandboxed explorable inside the card. */
+.widget-frame { width: 100%; height: 100%; border: 0; border-radius: var(--radius-small); background: var(--surface); display: block; }
+
+/* Quiz: what is being recalled is hidden until clicked. */
+.flow.is-quizzing .react-flow__node.is-hidden .shape-label,
+.flow.is-quizzing .react-flow__node.is-hidden .card-title,
+.flow.is-quizzing .react-flow__node.is-hidden .card-body,
+.flow.is-quizzing .react-flow__node.is-hidden .card-mermaid { visibility: hidden; }
+.flow.is-quizzing .react-flow__node.is-hidden .shape-node::after,
+.flow.is-quizzing .react-flow__node.is-hidden .card::after {
+  content: "?"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; color: var(--accent); pointer-events: none;
+}
+.flow.is-quizzing .react-flow__node.is-hidden { cursor: help; }
+.flow.is-quizzing .react-flow__node.is-revealed .shape-node, .flow.is-quizzing .react-flow__node.is-revealed .card { animation: arrive 200ms ease-out; }
+.flow.is-quizzing .react-flow__edge.is-quiz .react-flow__edge-text, .flow.is-quizzing .react-flow__edge.is-quiz .react-flow__edge-textbg { visibility: hidden; }
+.quiz-bar { gap: 12px; }
+
+/* Sketch style: a hand-drawn wobble on outlines and lines, and a handwritten face for labels. */
+.sketch-defs { position: absolute; }
+.flow.is-sketch .shape-svg > *, .flow.is-sketch .card, .flow.is-sketch .region { filter: url(#sketch-filter); }
+.flow.is-sketch .react-flow__edge-path { filter: url(#sketch-line); }
+.flow.is-sketch .shape-label, .flow.is-sketch .card-title, .flow.is-sketch .region-title, .flow.is-sketch .react-flow__edge-text {
+  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive; letter-spacing: 0;
+}

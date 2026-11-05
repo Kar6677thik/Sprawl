@@ -1,6 +1,6 @@
 # Making Sprawl explain anything visually: research and plan
 
-Written 5 November 2026. **Status: V1–V3 built; V4 drill-down and V5 tables and charts built ([§4](#4-what-was-built)); aliases, scenarios, causal loops and V6–V8 not started.** The question: what would make Sprawl the most capable place for Claude (or any MCP client) to explain a topic visually? This surveys the tools and research that do the most with visual explanation, and ranks what to add. The fixed decisions in [01-design.md](01-design.md) and the diagram model in [03-features.md](03-features.md) §3 still hold.
+Written 5 November 2026. **Status: V1–V3 built; V4 drill-down, V5 tables and charts, V6 widgets, V7 sketch style and V8 teach and quiz built ([§4](#4-what-was-built)); aliases, scenarios, causal loops, image cards, icons and learner-map checks not started.** The question: what would make Sprawl the most capable place for Claude (or any MCP client) to explain a topic visually? This surveys the tools and research that do the most with visual explanation, and ranks what to add. The fixed decisions in [01-design.md](01-design.md) and the diagram model in [03-features.md](03-features.md) §3 still hold.
 
 ## 1. What the field shows
 
@@ -60,18 +60,18 @@ Ranked by how much more Claude can explain per unit of work, given what Sprawl a
 - **Tables / matrices** as a card kind (comparisons, 2×2s), rendered from markdown tables at a readable size.
 - **Causal-loop mode** for systems: signed links (+/−), loops labelled reinforcing or balancing, delays marked. Later, a small stock-and-flow simulation.
 
-### V6. Interactive explorables (the ceiling)
+### V6. Interactive explorables (widgets built)
 
 - A **widget card**: a self-contained HTML/JS explorable (sliders, toggles, a small simulation, a chart that responds) written by Claude, run in a sandboxed iframe (`sandbox="allow-scripts"`, no same-origin, no network, strict CSP), sized like a card. Bret Victor's "reactive document" inside the canvas.
 - Parameters can be declared (name, range) so the canvas shows them and the outline tells Claude what the widget does.
 
-### V7. Pictures and style
+### V7. Pictures and style (sketch style built)
 
 - **Image cards** (upload, paste, web image by URL fetched by the browser only) with **annotation hotspots** linked to cards. Generated illustrations through the owner's chosen image model are optional and never used for exact diagrams.
 - A **hand-drawn style** per canvas or region (Rough.js) for whiteboard explanations.
 - **Icons on shapes** (cloud provider and tech icons) for architecture diagrams.
 
-### V8. Teach mode (learning science)
+### V8. Teach mode (teach and quiz built)
 
 - **`teach` prompt**: build a canvas progressively, question by question; withhold the next step until the learner tries ("cognitive gate"); ground in worked examples, as the Harvard tutor did.
 - **Quiz on a diagram**: hide labels or edges and ask the learner to restore them (retrieval practice on visuals), feeding the existing question review.
@@ -94,3 +94,6 @@ Ranked by how much more Claude can explain per unit of work, given what Sprawl a
 - **Wide content.** Rendered diagrams, tables and charts in a card region span as many masonry columns as they need (at most 3; `ContentGeometry`), and the region widens for them; in a diagram they take their own size. The owner can resize any of them.
 - **V5, tables and charts.** Kind `table`: a markdown table sized from its columns and rows. Kind `chart`: a Vega-Lite spec, validated on the server (one JSON object with a mark, layer, concat, facet or repeat; any `url` anywhere is refused, so data is always inline). The browser compiles it to Vega 6.4 and runs it through `vega-interpreter` (`ast: true`), never `new Function`, so it works under the page's CSP. Vega, Vega-Lite and the interpreter are BSD-3, pinned, lazy-loaded.
 - **V4, drill-down.** A card may name a `detail` region (migration 0006). `add_diagram detailOf=<card>` makes a diagram the inside of a shape; the card shows a zoom badge, double-click zooms into the detail, and the detail region shows a back link to the card. `update_cards detail` sets or clears it (`none`). The outline marks `[details: rg_…]`; deleting the detail region drops the link.
+- **V6, widgets.** Kind `widget`: an HTML fragment (or whole document) with inline CSS and JS, up to the code-body limit, sized from a leading `<!-- size: WxH -->` (else 576 × 400). `GET …/cards/{card}/widget` serves it to the owner only, as its own document with a policy that allows inline script and style and nothing else (no fetch, connect, frames, forms or workers; `frame-ancestors 'self'`). The UI frames it with `sandbox="allow-scripts"` and no same-origin, so it runs in an opaque origin with no access to Sprawl's cookies, storage or API. Fragments get Sprawl's colours as CSS variables (`--bg`, `--surface`, `--text`, `--muted`, `--border`, `--accent`) in light and dark.
+- **V7, sketch style.** A per-browser view preference (Ctrl+K "Sketch style"): an SVG turbulence filter wobbles shapes, cards, regions and lines, and labels take a handwritten face. No new dependency; the stored canvas is unchanged.
+- **V8, teach and quiz.** MCP prompts `teach_me` (build the canvas one step at a time, asking before each next step, with worked examples and a walkthrough) and `quiz_me` (questions from a region, answers checked against the canvas, misses recorded as question cards). In the UI, `Q` (or Ctrl+K) quizzes the selected region: labels of its shapes and cards and its connection labels are hidden; a click reveals one, with a count, Reveal all, Hide all and Esc.

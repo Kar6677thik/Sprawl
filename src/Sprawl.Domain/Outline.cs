@@ -151,6 +151,7 @@ public static class OutlineRenderer
         CardKinds.Mermaid => "mermaid",
         CardKinds.Table => "table",
         CardKinds.Chart => "chart",
+        CardKinds.Widget => "widget",
         _ => kind
     };
 
