@@ -5,8 +5,34 @@ import type { ZoomLevel } from "./zoom";
 import { Body, KindGlyph } from "./parts";
 import { shapeOutline } from "./shapes";
 import { MermaidView } from "./MermaidView";
+import { ChartView } from "./ChartView";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
+
+/** Drill-down: open a card's detail region, and go back from a detail region to the card it explains. */
+export const DetailContext = createContext<{ open: (regionId: string) => void; owners: ReadonlyMap<string, { id: string; title: string }>; back: (cardId: string) => void }>(
+  { open: () => {}, owners: new Map(), back: () => {} });
+
+function DetailBadge({ regionId }: { regionId: string | null | undefined }) {
+  const details = useContext(DetailContext);
+  if (!regionId) return null;
+  return (
+    <button type="button" className="detail-badge" title="Zoom into the detail" aria-label="Zoom into the detail" onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); details.open(regionId); }}>
+      <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M7 1.5h3.5V5M10.5 1.5 6.5 5.5M5 10.5H1.5V7M1.5 10.5l4-4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+    </button>
+  );
+}
+
+function BackLink({ regionId }: { regionId: string }) {
+  const details = useContext(DetailContext);
+  const owner = details.owners.get(regionId);
+  if (!owner) return null;
+  return (
+    <button type="button" className="detail-back" title={`Back to ${owner.title}`} onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); details.back(owner.id); }}>↑ {owner.title}</button>
+  );
+}
 
 /** Regions that have walkthroughs, and how to play one (a ▶ in the region's header). */
 export const WalkthroughContext = createContext<{ regions: ReadonlySet<string>; play: (regionId: string) => void }>({ regions: new Set(), play: () => {} });
@@ -67,6 +93,7 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
         <span className="region-title">{region.title}</span>
         {level !== "near" && <span className="region-count">{cardCount}</span>}
         {region.placement === "manual" && level !== "far" && <span className="pin" title="Placed by hand" aria-label="Placed by hand" />}
+        <BackLink regionId={region.id} />
         <PlayButton regionId={region.id} />
       </header>
     </div>
@@ -88,10 +115,11 @@ function PlayButton({ regionId }: { regionId: string }) {
 export const CardView = memo(function CardView({ data, selected }: NodeProps<CardNode>) {
   const { card, fresh, diagram } = data;
   const level = useContext(ZoomLevelContext);
-  // A rendered diagram is its own content: shown from the titles zoom on, resizable by the owner when selected.
-  if (card.kind === "mermaid" && level !== "far") {
+  // Rendered content (a diagram, chart or table) is shown from the titles zoom on, resizable by the owner when selected.
+  if ((card.kind === "mermaid" || card.kind === "chart" || card.kind === "table") && level !== "far") {
     return (
-      <article className={`card kind-mermaid${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`} data-tint={card.tint ?? undefined} aria-label={card.title}>
+      <article className={`card kind-${card.kind} is-content${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`} data-tint={card.tint ?? undefined} aria-label={card.title}>
+        <DetailBadge regionId={card.detail} />
         <NodeResizer isVisible={selected} minWidth={240} minHeight={160} lineClassName="resize-line" handleClassName="resize-handle" />
         <Anchors />
         {diagram && <Ports />}
@@ -99,7 +127,9 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
           <KindGlyph kind={card.kind} />
           <h3 className="card-title">{card.title}</h3>
         </header>
-        <div className="card-mermaid"><MermaidView source={card.body} /></div>
+        <div className="card-mermaid">
+          {card.kind === "mermaid" ? <MermaidView source={card.body} /> : card.kind === "chart" ? <ChartView spec={card.body} /> : <div className="card-table"><Body markdown={card.body} /></div>}
+        </div>
       </article>
     );
   }
@@ -112,6 +142,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
       <div className={classes.join(" ")} data-tint={card.tint ?? undefined} aria-label={card.title} title={card.body || undefined}>
         <Anchors />
         <Ports />
+        <DetailBadge regionId={card.detail} />
         <svg className="shape-svg" width={card.w} height={card.h} viewBox={`0 0 ${card.w} ${card.h}`} aria-hidden="true">
           {shapeOutline(card.shape, card.w, card.h, 1.5)}
         </svg>
@@ -128,6 +159,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
     <article className={classes.join(" ")} data-tint={card.tint ?? undefined} aria-label={card.title}>
       <Anchors />
       {diagram && <Ports />}
+      <DetailBadge regionId={card.detail} />
       {card.createdBy === "ai" && <span className="ai-mark" title="Added by Claude" aria-label="Added by Claude" />}
       {level !== "far" && (
         <>

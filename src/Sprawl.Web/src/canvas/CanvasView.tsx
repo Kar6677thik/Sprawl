@@ -21,7 +21,7 @@ import type { Stroke } from "./ink";
 import { LinkContext, type LinkActions } from "./parts";
 import { LinkIndex, mayBeExternal } from "./semantics";
 import { warmTidy } from "./tidy";
-import { nodeTypes, WalkthroughContext, ZoomLevelContext } from "./nodes";
+import { DetailContext, nodeTypes, WalkthroughContext, ZoomLevelContext } from "./nodes";
 import { WalkthroughPlayer } from "./WalkthroughPlayer";
 import { litFor, walkthroughsOf } from "./walkthrough";
 import { Shortcuts } from "./Shortcuts";
@@ -187,10 +187,19 @@ function Flow({ canvas, initialFocus }: Props) {
     setConnectFrom(null);
   }, [canvas, connectFrom, replaying]);
 
+  // Double-click zooms into a card's detail when it has one (Enter still opens its panel); otherwise it opens the card.
   const onNodeDoubleClick = useCallback((_event: unknown, node: Node) => {
+    const detail = doc.cards.find((c) => c.id === node.id)?.detail;
+    if (detail && doc.regions.some((r) => r.id === detail)) { focus(detail); return; }
     if (node.id.startsWith("cd_") && !replaying) setPanel({ kind: "card", id: node.id });
     else focus(node.id);
-  }, [focus, replaying]);
+  }, [doc.cards, doc.regions, focus, replaying]);
+
+  const detailContext = useMemo(() => {
+    const owners = new Map<string, { id: string; title: string }>();
+    for (const card of doc.cards) if (card.detail) owners.set(card.detail, { id: card.id, title: card.title });
+    return { open: (regionId: string) => focus(regionId), owners, back: (cardId: string) => focus(cardId) };
+  }, [doc.cards, focus]);
 
   const selection = useCallback(() => ({
     nodes: flow.getNodes().filter((n) => n.selected).map((n) => n.id),
@@ -564,6 +573,7 @@ function Flow({ canvas, initialFocus }: Props) {
     <ZoomLevelContext.Provider value={level}>
       <LinkContext.Provider value={linkActions}>
       <WalkthroughContext.Provider value={walkContext}>
+      <DetailContext.Provider value={detailContext}>
       <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}${walking ? " is-walking" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
         <ReactFlow
           nodes={shownNodes}
@@ -659,6 +669,7 @@ function Flow({ canvas, initialFocus }: Props) {
       )}
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
       {mermaidDraft && <MermaidDialog initial={mermaidDraft} onClose={() => setMermaidDraft(null)} onSubmit={(draft) => void drawMermaid({ ...draft, ...(mermaidDraft.near ? { near: mermaidDraft.near } : {}) })} />}
+      </DetailContext.Provider>
       </WalkthroughContext.Provider>
       </LinkContext.Provider>
     </ZoomLevelContext.Provider>

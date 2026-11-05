@@ -12,7 +12,7 @@ public static class Rows
 {
     private const string CanvasColumns = "id, title, description, tags, collection, pinned, archived, version, deleted_at, created_at, updated_at";
     private const string RegionColumns = "id, parent_id, title, tint, cols, x, y, w, h, placement, created_by, created_at, updated_at, layout";
-    private const string CardColumns = "id, region_id, kind, title, body, url, language, tint, emphasis, size, x, y, w, h, placement, size_source, created_by, updated_by, created_at, updated_at, shape";
+    private const string CardColumns = "id, region_id, kind, title, body, url, language, tint, emphasis, size, x, y, w, h, placement, size_source, created_by, updated_by, created_at, updated_at, shape, detail";
     private const string ConnectionColumns = "id, source_id, target_id, kind, label, created_by, created_at, line, ends";
     private const string SketchColumns = "id, region_id, path, tint, stroke, x, y, w, h, created_by, created_at";
     private const string WalkthroughColumns = "id, region_id, title, steps, created_by, created_at, updated_at";
@@ -95,7 +95,7 @@ public static class Rows
 
     private static Card ReadCard(SqliteDataReader r) => new(r.GetString(0), r.NullableString(1), r.GetString(2), r.GetString(3), r.GetString(4),
         r.NullableString(5), r.NullableString(6), r.NullableString(7), r.GetString(8), r.GetString(9), r.GetInt32(10), r.GetInt32(11), r.GetInt32(12),
-        r.GetInt32(13), r.GetString(14), r.GetString(15), r.GetString(16), r.GetString(17), r.Time(18), r.Time(19), r.NullableString(20));
+        r.GetInt32(13), r.GetString(14), r.GetString(15), r.GetString(16), r.GetString(17), r.Time(18), r.Time(19), r.NullableString(20), r.NullableString(21));
 
     private static Connection ReadConnection(SqliteDataReader r) => new(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3),
         r.NullableString(4), r.GetString(5), r.Time(6), r.NullableString(7), r.NullableString(8));
@@ -136,11 +136,11 @@ public static class Rows
                 case Card c:
                     await connection.Exec(transaction,
                         $"INSERT INTO cards (canvas_id, {CardColumns}) VALUES ($canvas, $id, $region, $kind, $title, $body, $url, $language, $tint, $emphasis, $size, $x, $y, $w, $h, " +
-                        "$placement, $sizeSource, $createdBy, $updatedBy, $created, $updated, $shape) ON CONFLICT(id) DO UPDATE SET region_id = excluded.region_id, kind = excluded.kind, " +
+                        "$placement, $sizeSource, $createdBy, $updatedBy, $created, $updated, $shape, $detail) ON CONFLICT(id) DO UPDATE SET region_id = excluded.region_id, kind = excluded.kind, " +
                         "title = excluded.title, body = excluded.body, url = excluded.url, language = excluded.language, tint = excluded.tint, emphasis = excluded.emphasis, " +
                         "size = excluded.size, x = excluded.x, y = excluded.y, w = excluded.w, h = excluded.h, placement = excluded.placement, size_source = excluded.size_source, " +
-                        "created_by = excluded.created_by, updated_by = excluded.updated_by, created_at = excluded.created_at, updated_at = excluded.updated_at, shape = excluded.shape",
-                        cancellationToken, ("$shape", c.Shape), ("$canvas", canvasId), ("$id", c.Id), ("$region", c.RegionId), ("$kind", c.Kind), ("$title", c.Title), ("$body", c.Body), ("$url", c.Url),
+                        "created_by = excluded.created_by, updated_by = excluded.updated_by, created_at = excluded.created_at, updated_at = excluded.updated_at, shape = excluded.shape, detail = excluded.detail",
+                        cancellationToken, ("$shape", c.Shape), ("$detail", c.Detail), ("$canvas", canvasId), ("$id", c.Id), ("$region", c.RegionId), ("$kind", c.Kind), ("$title", c.Title), ("$body", c.Body), ("$url", c.Url),
                         ("$language", c.Language), ("$tint", c.Tint), ("$emphasis", c.Emphasis), ("$size", c.Size), ("$x", c.X), ("$y", c.Y), ("$w", c.W), ("$h", c.H),
                         ("$placement", c.Placement), ("$sizeSource", c.SizeSource), ("$createdBy", c.CreatedBy), ("$updatedBy", c.UpdatedBy),
                         ("$created", Sql.Iso(c.CreatedAt)), ("$updated", Sql.Iso(c.UpdatedAt)));

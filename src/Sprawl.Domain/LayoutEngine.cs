@@ -105,16 +105,24 @@ public sealed class LayoutEngine(CanvasState state)
             state.Cards[cardId] = card with { X = Geometry.Padding, Y = Geometry.Header, Placement = Placements.Auto };
             return;
         }
-        var (col, y) = BestColumn(region, cardId, card.H);
+        // Wide content (tables, charts, rendered diagrams) spans whole columns; the region widens to fit it.
+        var span = ContentGeometry.SpanOf(card.W);
+        if (region.Cols < span)
+        {
+            region = region with { Cols = Math.Min(Geometry.MaxCols, span) };
+            state.Regions[regionId] = region;
+            Touch(regionId);
+        }
+        var (col, y) = BestColumn(region, cardId, card.H, span);
         var contentWidth = Geometry.ContentWidth(region.Cols);
         if (region.Cols < Geometry.MaxCols && y + card.H - Geometry.Header > Geometry.TallnessLimit * contentWidth && CanWiden(region))
         {
             region = region with { Cols = region.Cols + 1 };
             state.Regions[regionId] = region;
             Touch(regionId);
-            (col, y) = BestColumn(region, cardId, card.H);
+            (col, y) = BestColumn(region, cardId, card.H, span);
         }
-        state.Cards[cardId] = card with { X = Geometry.ColumnX(col), Y = y, W = Geometry.CardWidth, Placement = Placements.Auto };
+        state.Cards[cardId] = card with { X = Geometry.ColumnX(col), Y = y, W = span == 1 ? Geometry.CardWidth : card.W, Placement = Placements.Auto };
     }
 
     /// <summary>
@@ -166,14 +174,15 @@ public sealed class LayoutEngine(CanvasState state)
         return warnings;
     }
 
-    private (int Col, int Y) BestColumn(Region region, string cardId, int height)
+    private (int Col, int Y) BestColumn(Region region, string cardId, int height, int span = 1)
     {
         var children = Children(region.Id).Where(box => box.Id != cardId).ToList();
         var best = (Col: 0, Y: int.MaxValue);
-        for (var col = 0; col < region.Cols; col++)
+        var width = span * Geometry.Pitch - Geometry.Gap;
+        for (var col = 0; col + span <= Math.Max(region.Cols, span); col++)
         {
             var left = Geometry.ColumnX(col);
-            var inColumn = children.Where(box => box.X < left + Geometry.CardWidth && box.Right > left).ToList();
+            var inColumn = children.Where(box => box.X < left + width && box.Right > left).ToList();
             var y = Geometry.Header;
             foreach (var box in inColumn)
                 if (!box.Manual && EntityIds.KindOf(box.Id) == EntityKind.Card) y = Math.Max(y, box.Bottom + Geometry.Gap);

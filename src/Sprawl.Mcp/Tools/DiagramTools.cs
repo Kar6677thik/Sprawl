@@ -45,6 +45,8 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         [Description("Place the diagram next to this top-level region (id or title).")] string? near = null,
         [Description("Override the Mermaid direction: flow-down or flow-right.")] RegionLayout? layout = null,
         [Description("Redraw the diagram with this title if it already exists (its shapes, groups and their connections are replaced).")] bool replace = false,
+        [Description("Make this diagram the detail of a card or shape elsewhere (its id, cd_…): zooming into that card opens this diagram. Use it to go from an " +
+            "overview to the inside of one component (system → container → component), C4-style.")] string? detailOf = null,
         [Description("The version from your last read; required with replace=true.")] long? expectedVersion = null,
         [Description("Optional walkthrough of this diagram, created in the same call: ordered steps whose highlight uses the Mermaid node ids (or titles). " +
             "Strongly recommended for anything with a flow: it is how the diagram explains itself step by step.")] IReadOnlyList<StepInput>? walkthrough = null,
@@ -56,7 +58,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
             if (replace && expectedVersion is null) throw new ArgumentException("Pass expectedVersion (from get_canvas or get_diagram's canvas read) when replacing a diagram.");
             var refPrefix = "d";
             var intent = new AddDiagramIntent(Text.Required(title, "title", Limits.RegionTitle), Text.Required(mermaid, "mermaid", Limits.Mermaid), refPrefix,
-                parent, near, layout is null ? null : Map.Layout(layout), replace);
+                parent, near, layout is null ? null : Map.Layout(layout), replace, detailOf);
             var intents = new List<Intent> { intent };
             if (walkthrough is { Count: > 0 })
             {

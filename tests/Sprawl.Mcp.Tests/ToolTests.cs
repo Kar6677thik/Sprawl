@@ -53,7 +53,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         }
         // Coordinates are never part of any input schema: Claude cannot place things by position.
         Assert.DoesNotContain("\"x\"", body.ToString());
-        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\",\"mermaid\"]", body.ToString().Replace(" ", ""));
+        Assert.Contains("\"enum\":[\"idea\",\"note\",\"question\",\"link\",\"code\",\"mermaid\",\"table\",\"chart\"]", body.ToString().Replace(" ", ""));
         Assert.Contains("get_canvas", tools["add_to_canvas"].GetProperty("description").GetString());
     }
 

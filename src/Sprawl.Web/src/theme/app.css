@@ -281,3 +281,23 @@ input::placeholder { color: var(--text-faint); }
 .region-play { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 8px; font-size: 11.5px; color: var(--accent); border-color: transparent; background: var(--accent-soft); border-radius: 999px; }
 .region-play:hover { border-color: var(--accent-ring); }
 @media (prefers-reduced-motion: reduce) { .flow .react-flow__edge.animated path { animation: none; } }
+
+/* Charts and tables. */
+.chart-view { width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; }
+.chart-view svg { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.card-table { height: 100%; overflow: auto; font-size: 12.5px; }
+.card-table table, .panel-preview table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.card-table th, .card-table td, .panel-preview th, .panel-preview td { padding: 5px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.card-table th, .panel-preview th { font-weight: 600; color: var(--text); border-bottom-color: var(--border-strong); }
+.card-table td { color: var(--text-muted); }
+.card-table td:first-child { color: var(--text); font-weight: 500; }
+
+/* Drill-down: a card with a detail diagram, and the way back. */
+.detail-badge { position: absolute; top: 6px; right: 18px; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  color: var(--accent); background: var(--surface); border: 1px solid var(--accent-ring); border-radius: 6px; }
+.shape-node .detail-badge { top: -8px; right: -8px; }
+.detail-badge:hover { background: var(--accent-soft); }
+.detail-back { padding: 2px 8px; font-size: 11.5px; color: var(--text-muted); border-color: var(--border); border-radius: 999px; background: var(--surface); }
+.detail-back:hover { color: var(--text); }
+.region-header .detail-back + .region-play, .region-header .detail-back { margin-left: auto; }
+.region-header .detail-back + .region-play { margin-left: 6px; }

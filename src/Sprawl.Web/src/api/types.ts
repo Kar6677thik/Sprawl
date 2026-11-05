@@ -1,6 +1,6 @@
 // Mirrors src/Sprawl.Contracts (camelCase JSON). Keep in step with the C# records.
 
-export type CardKind = "idea" | "note" | "question" | "link" | "code" | "mermaid";
+export type CardKind = "idea" | "note" | "question" | "link" | "code" | "mermaid" | "table" | "chart";
 export type ConnectionKind = "relates" | "leads-to" | "contradicts" | "example-of" | "depends-on";
 export type Placement = "auto" | "manual";
 export type Author = "human" | "ai";
@@ -61,6 +61,8 @@ export interface Card {
   createdAt: string;
   updatedAt: string;
   shape?: Shape | null;
+  /** A region that explains this card in detail (zooming in opens it). */
+  detail?: string | null;
 }
 
 export interface Connection {
@@ -191,7 +193,7 @@ export type Intent =
   | { type: "addRegion"; title: string; ref?: string; parent?: string; tint?: string; near?: string; layout?: RegionLayout }
   | { type: "addCard"; kind: CardKind; title: string; region?: string; ref?: string; body?: string; url?: string; language?: string; at?: { x: number; y: number }; shape?: Shape }
   | { type: "moveCards"; ids: string[]; toRegion: string }
-  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string; shape?: Shape | "none" }
+  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string; shape?: Shape | "none"; detail?: string }
   | { type: "connect"; from: string; to: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
   | { type: "updateConnection"; id: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
   | { type: "addDiagram"; title: string; mermaid: string; ref?: string; parent?: string; near?: string; layout?: RegionLayout; replace?: boolean }

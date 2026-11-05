@@ -9,7 +9,11 @@ public static class CardKinds
     public const string Code = "code";
     /// <summary>A rendered Mermaid diagram of any type (sequence, class, ER, state, mind map, timeline, …); the body is the source.</summary>
     public const string Mermaid = "mermaid";
-    public static readonly string[] All = [Idea, Note, Question, Link, Code, Mermaid];
+    /// <summary>A markdown table, shown as wide as its columns need.</summary>
+    public const string Table = "table";
+    /// <summary>A chart: the body is a Vega-Lite JSON spec with inline data.</summary>
+    public const string Chart = "chart";
+    public static readonly string[] All = [Idea, Note, Question, Link, Code, Mermaid, Table, Chart];
 }
 
 public static class ConnectionKinds

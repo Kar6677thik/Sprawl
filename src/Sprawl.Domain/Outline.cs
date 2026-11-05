@@ -116,6 +116,7 @@ public static class OutlineRenderer
                 output.Append("- ").Append(card.Id).Append(' ').Append(card.Shape is null ? KindLabel(card.Kind) : $"[{card.Shape}]").Append(' ');
                 if (card.Emphasis == Emphases.Key) output.Append("★ ");
                 output.Append(card.Title);
+                if (card.Detail is not null) output.Append(" [details: ").Append(card.Detail).Append(']');
                 if (card.Url is not null && depth != OutlineDepths.Full) output.Append(" <").Append(card.Url).Append('>');
                 if (depth == OutlineDepths.Short && card.Body.Length > 0)
                 {
@@ -148,6 +149,8 @@ public static class OutlineRenderer
         CardKinds.Link => "link",
         CardKinds.Code => "code",
         CardKinds.Mermaid => "mermaid",
+        CardKinds.Table => "table",
+        CardKinds.Chart => "chart",
         _ => kind
     };
 

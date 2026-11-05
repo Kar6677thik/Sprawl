@@ -219,6 +219,28 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Tables_charts_and_detail_links_persist()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Content kinds",
+            new AddCardIntent(CardKinds.Table, "Comparison", "R", "t", "| a | b |\n|---|---|\n| 1 | 2 |"),
+            new AddCardIntent(CardKinds.Chart, "Chart", "R", "c", """{"mark":"bar","data":{"values":[{"x":"a","y":1}]},"encoding":{"x":{"field":"x"},"y":{"field":"y","type":"quantitative"}}}"""));
+        var overview = await (await device.PostAsJsonAsync($"/api/v1/canvases/{created.CanvasId}/batches",
+            new BatchRequest([new AddDiagramIntent("Overview", "flowchart LR\n a[API] --> b[DB]", "o")]), Api.Json)).Read<BatchResult>();
+        await (await device.PostAsJsonAsync($"/api/v1/canvases/{created.CanvasId}/batches",
+            new BatchRequest([new AddDiagramIntent("Inside the API", "flowchart TD\n r[Router] --> h[Handler]", "i", DetailOf: overview.Refs["o:a"])]), Api.Json)).Read<BatchResult>();
+
+        var document = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}")).Read<CanvasDocument>();
+        Assert.Equal(CardKinds.Table, document.Cards.Single(c => c.Id == created.Refs["t"]).Kind);
+        Assert.Equal(CardKinds.Chart, document.Cards.Single(c => c.Id == created.Refs["c"]).Kind);
+        Assert.Equal(document.Regions.Single(r => r.Title == "Inside the API").Id, document.Cards.Single(c => c.Id == overview.Refs["o:a"]).Detail);
+
+        var refused = await device.PostAsJsonAsync($"/api/v1/canvases/{created.CanvasId}/batches",
+            new BatchRequest([new AddCardIntent(CardKinds.Chart, "Remote", "R", Body: """{"mark":"bar","data":{"url":"https://example.com/x.csv"}}""")]), Api.Json);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

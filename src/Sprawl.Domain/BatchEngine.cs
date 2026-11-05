@@ -98,6 +98,9 @@ public sealed partial class BatchEngine
         // A sketch lives inside its region: when a merge or delete removes the region, its sketches go with it.
         foreach (var orphan in state.Sketches.Values.Where(s => s.RegionId is not null && !state.Regions.ContainsKey(s.RegionId)).ToList()) state.Sketches.Remove(orphan.Id);
         foreach (var orphan in state.Walkthroughs.Values.Where(w => !state.Regions.ContainsKey(w.RegionId)).ToList()) state.Walkthroughs.Remove(orphan.Id);
+        // A detail link to a region that is gone is dropped.
+        foreach (var card in state.Cards.Values.Where(c => c.Detail is not null && !state.Regions.ContainsKey(c.Detail)).ToList())
+            state.Cards[card.Id] = card with { Detail = null };
         if (state.Walkthroughs.Count > Limits.WalkthroughsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.WalkthroughsPerCanvas} walkthroughs.");
         if (state.Sketches.Count > Limits.SketchesPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.SketchesPerCanvas} sketches.");
         if (state.Connections.Count > Limits.ConnectionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.ConnectionsPerCanvas} connections.");
@@ -345,7 +348,8 @@ public sealed partial class BatchEngine
         var size = Geometry.SizeFor(kind, body);
         var id = NewId(EntityKind.Card);
         var card = Sized(new Card(id, region?.Id, kind, title, body, url, language, Text.Tint(add.Tint), Text.Emphasis(add.Emphasis), size,
-            0, 0, Geometry.CardWidth, Geometry.HeightOf(size), Placements.Auto, Placements.Auto, actor.Author, actor.Author, now, now, Text.Shape(add.Shape)));
+            0, 0, Geometry.CardWidth, Geometry.HeightOf(size), Placements.Auto, Placements.Auto, actor.Author, actor.Author, now, now, Text.Shape(add.Shape),
+            add.Detail is null ? null : RequireRegion(add.Detail).Id));
         if (add.At is { } at)
         {
             var (x, y) = Clamp(at.X, at.Y, region is not null);
@@ -382,7 +386,8 @@ public sealed partial class BatchEngine
             Language = update.Language is null ? card.Language : Text.Language(update.Language),
             Emphasis = update.Emphasis is null ? card.Emphasis : Text.Emphasis(update.Emphasis),
             Tint = update.Tint is null ? card.Tint : Text.Tint(update.Tint),
-            Shape = update.Shape is null ? card.Shape : Text.Shape(update.Shape)
+            Shape = update.Shape is null ? card.Shape : Text.Shape(update.Shape),
+            Detail = update.Detail is null ? card.Detail : update.Detail.Trim().ToLowerInvariant() == "none" ? null : RequireRegion(update.Detail).Id
         };
         if (updated == card) return;
         Resize(card, updated with { UpdatedAt = now, UpdatedBy = actor.Author });
@@ -539,6 +544,12 @@ public sealed partial class BatchEngine
 
         string NodeRef(string nodeId) => prefix.Length + nodeId.Length + 1 <= Limits.Ref ? $"{prefix}:{nodeId}" : $"{prefix}:#{StableHash(nodeId)}";
         string GroupRef(string groupId) => prefix.Length + groupId.Length + 2 <= Limits.Ref ? $"{prefix}/{groupId}" : $"{prefix}/#{StableHash(groupId)}";
+        if (add.DetailOf is not null)
+        {
+            var owner = RequireCard(add.DetailOf);
+            if (owner.RegionId == region.Id) throw SprawlException.Invalid("A diagram cannot be the detail of one of its own shapes.");
+            state.Cards[owner.Id] = owner with { Detail = region.Id, UpdatedAt = now, UpdatedBy = actor.Author };
+        }
         if (type != Mermaid.Flowchart)
         {
             // Sequence, class, ER, state, mind map, timeline, …: one card holding the source, rendered by the browser.
@@ -645,11 +656,19 @@ public sealed partial class BatchEngine
     {
         if (card.SizeSource == Placements.Manual) return card;
         var inDiagram = card.RegionId is { } r && state.Regions.TryGetValue(r, out var region) && RegionLayouts.IsDiagram(region.Layout);
-        if (card.Kind == CardKinds.Mermaid)
+        if (card.Kind is CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart)
         {
-            var (mw, mh) = MermaidGeometry.Size(card.Body);
-            return inDiagram ? card with { Size = CardSizes.Tall, W = mw, H = mh }
-                : card with { Size = CardSizes.Tall, W = Geometry.CardWidth, H = Geometry.TallHeight };
+            var (cw, ch) = card.Kind switch
+            {
+                CardKinds.Table => ContentGeometry.Table(card.Body),
+                CardKinds.Chart => ContentGeometry.Chart(card.Body),
+                _ => MermaidGeometry.Size(card.Body)
+            };
+            if (inDiagram) return card with { Size = CardSizes.Tall, W = cw, H = ch };
+            // In a card region it spans whole columns; its height follows the width it gets.
+            var width = ContentGeometry.SpanWidth(cw);
+            var height = (int)Math.Round(Math.Clamp(ch * Math.Min(1.0, (double)width / cw), Geometry.CompactHeight, 1600) / 8.0) * 8;
+            return card with { Size = CardSizes.Tall, W = width, H = height };
         }
         if (card.Shape is { } shape)
         {
@@ -912,8 +931,9 @@ public static partial class Text
     public static string Body(string? value, string kind)
     {
         var body = (value ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
-        var max = kind is CardKinds.Code or CardKinds.Mermaid ? Limits.CodeBody : Limits.CardBody;
-        return body.Length > max ? throw SprawlException.Limit($"A {kind} card body is at most {max} characters.") : body;
+        var max = kind is CardKinds.Code or CardKinds.Mermaid or CardKinds.Table or CardKinds.Chart ? Limits.CodeBody : Limits.CardBody;
+        if (body.Length > max) throw SprawlException.Limit($"A {kind} card body is at most {max} characters.");
+        return kind == CardKinds.Chart ? ContentGeometry.ValidateChart(body) : body;
     }
 
     public static string? Url(string? value, string kind)

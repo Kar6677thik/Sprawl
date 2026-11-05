@@ -1,6 +1,6 @@
 # Making Sprawl explain anything visually: research and plan
 
-Written 5 November 2026. **Status: V1–V3 built 5 Nov ([§4](#4-what-was-built)); V4–V8 not started.** The question: what would make Sprawl the most capable place for Claude (or any MCP client) to explain a topic visually? This surveys the tools and research that do the most with visual explanation, and ranks what to add. The fixed decisions in [01-design.md](01-design.md) and the diagram model in [03-features.md](03-features.md) §3 still hold.
+Written 5 November 2026. **Status: V1–V3 built; V4 drill-down and V5 tables and charts built ([§4](#4-what-was-built)); aliases, scenarios, causal loops and V6–V8 not started.** The question: what would make Sprawl the most capable place for Claude (or any MCP client) to explain a topic visually? This surveys the tools and research that do the most with visual explanation, and ranks what to add. The fixed decisions in [01-design.md](01-design.md) and the diagram model in [03-features.md](03-features.md) §3 still hold.
 
 ## 1. What the field shows
 
@@ -48,13 +48,13 @@ Ranked by how much more Claude can explain per unit of work, given what Sprawl a
 - An **MCP App** (`ui://sprawl/region`): `get_diagram` and `add_diagram` return a live, pannable view inline in Claude, with a step-through for walkthroughs and an "Open in Sprawl" link. The diagram appears where the conversation is.
 - Check the .NET MCP SDK's MCP Apps support before building; fall back to returning the SVG as an image block.
 
-### V4. Drill-down and perspectives (C4-style depth)
+### V4. Drill-down and perspectives (drill-down built)
 
 - **Zoom into a shape**: a shape may link to a *detail* region (its internals). Double-click zooms into it with a breadcrumb back. MCP: `add_diagram` with `detailOf: <cardId>`.
 - **The same thing in several diagrams**: a shape may be an *alias* of another card, so "Orders service" in the architecture, the deployment and the checkout flow is one card with one set of notes and backlinks.
 - **Scenarios** (D2): alternate states of a diagram, e.g. "broker down", as overlays that restyle and annotate items without copying the diagram.
 
-### V5. Data and systems
+### V5. Data and systems (tables and charts built)
 
 - **Chart cards** from Vega-Lite specs, schema-validated and auto-repaired server-side (the VegaChat approach); data inline or from a CSV-like body. MCP: `add_chart`.
 - **Tables / matrices** as a card kind (comparisons, 2×2s), rendered from markdown tables at a readable size.
@@ -91,3 +91,6 @@ Ranked by how much more Claude can explain per unit of work, given what Sprawl a
 - **V2, walkthroughs.** A `Walkthrough` entity (`wt_…`, migration 0005, in the op log): a region, a title and up to 40 steps of markdown text with the ids to highlight. Names are resolved when written (refs from the batch, ids, or titles inside the region) and unknown names fail with the step and the name. The UI plays it (`W`, the ▶ on the region, or Ctrl+K): the step's items stay lit, the rest fades, connections between lit items animate, the camera frames the step and the text sits in a caption card above the step controls. MCP: `add_walkthrough`, and `add_diagram`'s `walkthrough` (node ids work as highlights), deleting through `reorganize`. The outline lists walkthroughs, and their steps at full depth.
 - **V3, in the chat.** `SvgRenderer` draws a region on the server (shapes, cards, groups, orthogonal connections with styles, labels), with every item tagged `data-id` (and `data-group`), colours as CSS variables with light and dark schemes, and all text escaped. `GET …/regions/{region}/svg` (served with `default-src 'none'`) and `…/view` (SVG, Mermaid and walkthroughs). MCP: `show_diagram`, and an MCP App (`ui://sprawl/diagram`, `text/html;profile=mcp-app`) that `show_diagram` and `add_diagram` point to through `_meta.ui.resourceUri`: it renders the SVG inline in Claude with pan, zoom and fit, and steps through walkthroughs with highlighting. It speaks only the documented postMessage JSON-RPC (`ui/initialize`, `ui/notifications/initialized`, `…/tool-result`, `…/size-changed`, `tools/call`) and loads nothing from the network. Checked in a minimal test host; a real check needs Claude with MCP Apps.
 - **Not yet:** rendered (non-flowchart) Mermaid cards draw as a titled frame in the server SVG and the chat view, since their drawing needs Mermaid in a browser.
+- **Wide content.** Rendered diagrams, tables and charts in a card region span as many masonry columns as they need (at most 3; `ContentGeometry`), and the region widens for them; in a diagram they take their own size. The owner can resize any of them.
+- **V5, tables and charts.** Kind `table`: a markdown table sized from its columns and rows. Kind `chart`: a Vega-Lite spec, validated on the server (one JSON object with a mark, layer, concat, facet or repeat; any `url` anywhere is refused, so data is always inline). The browser compiles it to Vega 6.4 and runs it through `vega-interpreter` (`ast: true`), never `new Function`, so it works under the page's CSP. Vega, Vega-Lite and the interpreter are BSD-3, pinned, lazy-loaded.
+- **V4, drill-down.** A card may name a `detail` region (migration 0006). `add_diagram detailOf=<card>` makes a diagram the inside of a shape; the card shows a zoom badge, double-click zooms into the detail, and the detail region shows a back link to the card. `update_cards detail` sets or clears it (`none`). The outline marks `[details: rg_…]`; deleting the detail region drops the link.

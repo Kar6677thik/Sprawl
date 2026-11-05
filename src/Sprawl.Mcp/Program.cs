@@ -238,6 +238,8 @@ namespace Sprawl.Mcp
               shapes, the rest rendered diagrams. Give every diagram with a flow a walkthrough (add_walkthrough, or add_diagram's walkthrough): the
               steps the owner plays to understand it. Use diagrams for architectures, request and data flows, state machines, decision flowcharts and
               processes, next to the cards that explain them, so a canvas holds both the ideas and the pictures of how they fit.
+            - Depth: add_diagram detailOf=<card id> makes a diagram the inside of a shape (overview → detail, as in the C4 model). Tables (kind table,
+              markdown) suit comparisons and cheat sheets; charts (kind chart, Vega-Lite with inline data) suit numbers. Both render as wide as needed.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.
             - Batch related additions into one add_to_canvas call, with refs for cross-references and a requestId so a retry is not applied twice.

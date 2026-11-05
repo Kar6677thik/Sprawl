@@ -68,7 +68,8 @@ public sealed record Card(
     string UpdatedBy,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? Shape = null) : IEntity;
+    string? Shape = null,
+    string? Detail = null) : IEntity;
 
 /// <summary>
 /// A freehand stroke drawn by the owner: an SVG path (M/L/Q/C/Z commands) in its own box, which is relative to its region

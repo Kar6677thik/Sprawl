@@ -46,7 +46,8 @@ public sealed record AddCardIntent(
     string? Emphasis = null,
     string? Tint = null,
     Point? At = null,
-    string? Shape = null) : Intent;
+    string? Shape = null,
+    string? Detail = null) : Intent;
 
 public sealed record UpdateCardIntent(
     string Id,
@@ -58,7 +59,8 @@ public sealed record UpdateCardIntent(
     string? Language = null,
     string? Emphasis = null,
     string? Tint = null,
-    string? Shape = null) : Intent;
+    string? Shape = null,
+    string? Detail = null) : Intent;
 
 public sealed record ConnectIntent(string From, string To, string? Kind = null, string? Label = null, string? Line = null, string? Ends = null) : Intent;
 
@@ -70,7 +72,8 @@ public sealed record UpdateConnectionIntent(string Id, string? Kind = null, stri
 /// a connection per edge and a sub-region per subgraph, laid out by the server. Refs <c>{Ref}:{nodeId}</c> name the nodes.
 /// </summary>
 /// <param name="Replace">When a region with this title exists, clear its shapes, groups and their connections first, so the diagram is redrawn in place.</param>
-public sealed record AddDiagramIntent(string Title, string Mermaid, string? Ref = null, string? Parent = null, string? Near = null, string? Layout = null, bool Replace = false) : Intent;
+/// <param name="DetailOf">A card (ref or id) this diagram explains in detail: the card links to it and opens it when zoomed into.</param>
+public sealed record AddDiagramIntent(string Title, string Mermaid, string? Ref = null, string? Parent = null, string? Near = null, string? Layout = null, bool Replace = false, string? DetailOf = null) : Intent;
 
 /// <summary>Remove by connection <paramref name="Id"/>, or by endpoints (and optionally kind).</summary>
 public sealed record DisconnectIntent(string? Id = null, string? From = null, string? To = null, string? Kind = null) : Intent;
