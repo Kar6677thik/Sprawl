@@ -34,7 +34,8 @@ public static class SvgRenderer
         svg.Append($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" font-family=\"Inter, system-ui, -apple-system, Segoe UI, sans-serif\" role=\"img\" aria-label=\"{Esc(region.Title)}\">");
         svg.Append("<title>").Append(Esc(region.Title)).Append("</title>");
         svg.Append(Style);
-        svg.Append("<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 z\" class=\"arrowhead\"/></marker></defs>");
+        svg.Append("<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"11\" markerHeight=\"11\" orient=\"auto-start-reverse\"><path d=\"M0 0 L10 5 L0 10 z\" class=\"arrowhead\"/></marker>" +
+            "<marker id=\"loop-arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerUnits=\"userSpaceOnUse\" markerWidth=\"8\" markerHeight=\"8\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 z\" class=\"loop-arrowhead\"/></marker></defs>");
         svg.Append($"<g transform=\"translate({Margin} {Margin})\">");
         svg.Append($"<rect class=\"region\" x=\"0\" y=\"0\" width=\"{region.W}\" height=\"{region.H}\" rx=\"14\"/>");
         svg.Append($"<text class=\"region-title\" x=\"24\" y=\"30\">{Esc(region.Title)}</text>");
@@ -46,12 +47,13 @@ public static class SvgRenderer
             svg.Append($"<text class=\"group-title\" x=\"{N(b.X + 20)}\" y=\"{N(b.Y + 28)}\">{Esc(group.Title)}</text></g>");
         }
 
-        // Connections under the shapes, as in the app.
+        // Connections under the shapes, as in the app. A causal-loop diagram curves them, bowing out of the circle.
+        var loops = region.Layout == RegionLayouts.Loops;
         foreach (var c in state.Connections.Values.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal))
         {
             if (!boxes.TryGetValue(c.SourceId, out var from) || !boxes.TryGetValue(c.TargetId, out var to)) continue;
             var ends = c.Ends ?? (ConnectionStyle.Directional(c.Kind) ? EndStyles.End : EndStyles.None);
-            var (path, labelX, labelY) = Route(from, to);
+            var (path, labelX, labelY) = loops ? Curve(from, to) : Route(from, to);
             var markers = (ends is EndStyles.End or EndStyles.Both ? " marker-end=\"url(#arrow)\"" : "") + (ends is EndStyles.Start or EndStyles.Both ? " marker-start=\"url(#arrow)\"" : "");
             svg.Append($"<g class=\"item edge line-{c.Line ?? LineStyles.Solid} kind-{c.Kind}\" data-id=\"{c.Id}\" data-from=\"{c.SourceId}\" data-to=\"{c.TargetId}\"><path d=\"{path}\"{markers}/>");
             if (c.Label is { } label)
@@ -65,6 +67,12 @@ public static class SvgRenderer
 
         foreach (var card in state.Cards.Values.Where(c => boxes.ContainsKey(c.Id)).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal))
             svg.Append(CardSvg(card, boxes[card.Id], card.RegionId == region.Id ? null : card.RegionId));
+        if (loops)
+        {
+            var direct = boxes.Values.Where(b => state.Cards.GetValueOrDefault(b.Id)?.RegionId == region.Id || state.Regions.GetValueOrDefault(b.Id)?.ParentId == region.Id).ToList();
+            var middle = (X: direct.Average(b => b.X + b.W / 2), Y: direct.Average(b => b.Y + b.H / 2));
+            foreach (var loop in CausalLoops.Find(state, region.Id)) svg.Append(LoopBadge(loop, boxes, middle));
+        }
 
         svg.Append("</g></svg>");
         return svg.ToString();
@@ -156,6 +164,47 @@ public static class SvgRenderer
                $"<path class=\"shape\" d=\"M{N(cx - r * 1.9)} {N(y0 + r * 4.4)} C{N(cx - r * 1.9)} {N(y0 + r * 2.4)} {N(cx + r * 1.9)} {N(y0 + r * 2.4)} {N(cx + r * 1.9)} {N(y0 + r * 4.4)} Z\"/>";
     }
 
+    /// <summary>
+    /// A curve for a causal link: it bows to the left of its direction (outward, for a loop drawn clockwise), so the two
+    /// links of a two-node loop never overlap. It leaves each box where the line toward the curve's control point does.
+    /// </summary>
+    public static (string Path, double LabelX, double LabelY) Curve(Box from, Box to)
+    {
+        double ax = from.X + from.W / 2, ay = from.Y + from.H / 2, bx = to.X + to.W / 2, by = to.Y + to.H / 2;
+        double dx = bx - ax, dy = by - ay, length = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+        double cx = (ax + bx) / 2 + dy / length * length * 0.22, cy = (ay + by) / 2 - dx / length * length * 0.22;
+        var (sx, sy) = Clip(from, cx, cy);
+        var (tx, ty) = Clip(to, cx, cy);
+        return ($"M{N(sx)} {N(sy)} Q{N(cx)} {N(cy)} {N(tx)} {N(ty)}", 0.25 * sx + 0.5 * cx + 0.25 * tx, 0.25 * sy + 0.5 * cy + 0.25 * ty);
+    }
+
+    /// <summary>Where the ray from a box's centre toward a point leaves the box.</summary>
+    private static (double X, double Y) Clip(Box box, double px, double py)
+    {
+        double cx = box.X + box.W / 2, cy = box.Y + box.H / 2, dx = px - cx, dy = py - cy;
+        if (dx == 0 && dy == 0) return (cx, cy);
+        var t = Math.Min(dx == 0 ? double.MaxValue : box.W / 2 / Math.Abs(dx), dy == 0 ? double.MaxValue : box.H / 2 / Math.Abs(dy));
+        return (cx + dx * t, cy + dy * t);
+    }
+
+    /// <summary>A loop's name (R1, B2) in a circle at the middle of its members, with an arrow turning the way the loop runs.</summary>
+    private static string LoopBadge(CausalLoops.Loop loop, Dictionary<string, Box> boxes, (double X, double Y) middle)
+    {
+        var centres = loop.Members.Where(boxes.ContainsKey).Select(id => (X: boxes[id].X + boxes[id].W / 2, Y: boxes[id].Y + boxes[id].H / 2)).ToList();
+        if (centres.Count < 2) return "";
+        double mx = centres.Average(c => c.X), my = centres.Average(c => c.Y), area = 0;
+        // A two-variable loop's middle lies between its two links: its badge moves over halfway toward the circle's centre.
+        if (centres.Count == 2) { mx += (middle.X - mx) * 0.55; my += (middle.Y - my) * 0.55; }
+        for (var i = 0; i < centres.Count; i++) { var (a, b) = (centres[i], centres[(i + 1) % centres.Count]); area += a.X * b.Y - b.X * a.Y; }
+        var sweep = area >= 0 ? 1 : 0; // screen coordinates: a positive area runs clockwise
+        var cls = loop.Polarity switch { 'R' => "loop-r", 'B' => "loop-b", _ => "loop-u" };
+        const double r = 19;
+        var startX = sweep == 1 ? mx + r : mx - r; // three quarters of a turn, ending at the top with the arrow
+        return $"<g class=\"item loop {cls}\" data-loop=\"{loop.Name}\"><circle cx=\"{N(mx)}\" cy=\"{N(my)}\" r=\"15\"/>" +
+               $"<path d=\"M{N(startX)} {N(my)} A{N(r)} {N(r)} 0 1 {sweep} {N(mx)} {N(my - r)}\" marker-end=\"url(#loop-arrow)\"/>" +
+               $"<text x=\"{N(mx)}\" y=\"{N(my + 4.5)}\" text-anchor=\"middle\">{loop.Name}</text></g>";
+    }
+
     /// <summary>An orthogonal route between the facing sides of two boxes, and a point for its label.</summary>
     public static (string Path, double LabelX, double LabelY) Route(Box from, Box to)
     {
@@ -219,10 +268,10 @@ public static class SvgRenderer
 
     private const string Style = """
         <style>
-        svg { --bg: #f7f7f8; --region: #eef0f3; --surface: #ffffff; --stroke: #8a8f98; --text: #1f2328; --muted: #5d636b; --accent: #2f6fde; --group: #b9bec6; }
-        @media (prefers-color-scheme: dark) { svg { --bg: #1b1c1e; --region: #232529; --surface: #2a2c30; --stroke: #8e939b; --text: #ececee; --muted: #a9adb4; --accent: #6b9cf0; --group: #4a4e55; } }
-        svg.theme-light { --bg: #f7f7f8; --region: #eef0f3; --surface: #ffffff; --stroke: #8a8f98; --text: #1f2328; --muted: #5d636b; --accent: #2f6fde; --group: #b9bec6; }
-        svg.theme-dark { --bg: #1b1c1e; --region: #232529; --surface: #2a2c30; --stroke: #8e939b; --text: #ececee; --muted: #a9adb4; --accent: #6b9cf0; --group: #4a4e55; }
+        svg { --bg: #f7f7f8; --region: #eef0f3; --surface: #ffffff; --stroke: #8a8f98; --text: #1f2328; --muted: #5d636b; --accent: #2f6fde; --group: #b9bec6; --loop-r: #b5651d; --loop-b: #23727d; }
+        @media (prefers-color-scheme: dark) { svg { --bg: #1b1c1e; --region: #232529; --surface: #2a2c30; --stroke: #8e939b; --text: #ececee; --muted: #a9adb4; --accent: #6b9cf0; --group: #4a4e55; --loop-r: #f0a35e; --loop-b: #5cc4cf; } }
+        svg.theme-light { --bg: #f7f7f8; --region: #eef0f3; --surface: #ffffff; --stroke: #8a8f98; --text: #1f2328; --muted: #5d636b; --accent: #2f6fde; --group: #b9bec6; --loop-r: #b5651d; --loop-b: #23727d; }
+        svg.theme-dark { --bg: #1b1c1e; --region: #232529; --surface: #2a2c30; --stroke: #8e939b; --text: #ececee; --muted: #a9adb4; --accent: #6b9cf0; --group: #4a4e55; --loop-r: #f0a35e; --loop-b: #5cc4cf; }
         .region { fill: var(--region); }
         .region-title { fill: var(--text); font-size: 14px; font-weight: 600; }
         .group rect { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 5 4; }
@@ -244,11 +293,22 @@ public static class SvgRenderer
         .tint-blue .shape { fill: #e3ecfb; stroke: #4a7fd6; } .tint-green .shape { fill: #e1f3e8; stroke: #3f9a63; }
         .tint-amber .shape { fill: #fbf0d9; stroke: #c98d14; } .tint-red .shape { fill: #fbe4e2; stroke: #d0564b; }
         .tint-violet .shape { fill: #efe7fa; stroke: #8a62c9; } .tint-grey .shape { fill: #eeeff1; stroke: #8a8f98; }
+        .loop circle { fill: var(--surface); stroke-width: 1.5; } .loop path { fill: none; stroke-width: 1.5; } .loop text { font-size: 12px; font-weight: 700; }
+        .loop-r circle, .loop-r path { stroke: var(--loop-r); } .loop-r text { fill: var(--loop-r); }
+        .loop-b circle, .loop-b path { stroke: var(--loop-b); } .loop-b text { fill: var(--loop-b); }
+        .loop-u circle, .loop-u path { stroke: var(--stroke); } .loop-u text { fill: var(--muted); }
+        .loop-arrowhead { fill: var(--stroke); }
         .item { transition: opacity 250ms ease; }
         .walking .item.dim { opacity: 0.15; }
         .walking .node.lit .shape, .walking .node.lit .card { stroke: var(--accent); stroke-width: 2.5; }
         .walking .edge.lit path { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 7 5; animation: flow 0.9s linear infinite; }
         .walking .edge.lit .arrowhead { fill: var(--accent); }
+        .walking .item.mark-down .shape, .walking .item.mark-down .card { stroke: #d0564b; stroke-width: 2.5; stroke-dasharray: 6 4; } .walking .edge.mark-down path { stroke: #d0564b; stroke-dasharray: 2 5; }
+        .walking .item.mark-slow .shape, .walking .item.mark-slow .card { stroke: #c98d14; stroke-width: 2.5; } .walking .edge.mark-slow path { stroke: #c98d14; stroke-width: 2.5; }
+        .walking .item.mark-hot .shape, .walking .item.mark-hot .card { stroke: #e0632b; stroke-width: 3; fill: #fde9dc; } .walking .edge.mark-hot path { stroke: #e0632b; stroke-width: 3; }
+        .walking .item.mark-added .shape, .walking .item.mark-added .card { stroke: #3f9a63; stroke-width: 2.5; fill: #e1f3e8; } .walking .edge.mark-added path { stroke: #3f9a63; stroke-width: 2.5; }
+        .walking .item.mark-removed { opacity: 0.35; } .walking .item.mark-removed .shape, .walking .item.mark-removed .card { stroke-dasharray: 3 4; } .walking .edge.mark-removed path { stroke-dasharray: 3 4; }
+        .walking .item.mark-changed .shape, .walking .item.mark-changed .card { stroke: #8a62c9; stroke-width: 2.5; } .walking .edge.mark-changed path { stroke: #8a62c9; stroke-width: 2.5; }
         @keyframes flow { to { stroke-dashoffset: -12; } }
         @media (prefers-reduced-motion: reduce) { .walking .edge.lit path { animation: none; } }
         </style>

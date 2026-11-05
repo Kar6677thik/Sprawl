@@ -26,7 +26,10 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         "Edges: A --> B (arrow), A --- B (line), A -.-> B (dashed: async, optional), A ==> B (thick: main path), A <--> B (both ways); " +
         "labels with A -->|label| B or A -- label --> B; chains A --> B --> C; fan-out A --> B & C. " +
         "Group with 'subgraph id [Title]' … 'end' (one level; a subgraph may set 'direction LR'). Styling lines (classDef, style) are ignored. " +
-        "Keep labels short (titles up to 120 characters, edge labels up to 40), at most 300 nodes.";
+        "Keep labels short (titles up to 120 characters, edge labels up to 40), at most 300 nodes. " +
+        "Causal-loop diagrams (feedback, vicious and virtuous circles, why a system resists change): write a flowchart of the variables, label every " +
+        "edge + (more causes more) or - (more causes less), add the word delay to a label for a delay (A -->|- delay| B), and pass layout=loops. Sprawl lays the " +
+        "variables around a circle, finds every loop and names it R1, R2 (reinforcing) or B1 (balancing); get_canvas lists the loops.";
 
     [McpServerTool(Name = "add_diagram", Title = "Draw a diagram", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Write)]
@@ -43,7 +46,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         [Description("The Mermaid source (any diagram type).")] string mermaid,
         [Description("Place the diagram inside this region (id or title); it then cannot hold subgroups (regions nest one level).")] string? parent = null,
         [Description("Place the diagram next to this top-level region (id or title).")] string? near = null,
-        [Description("Override the Mermaid direction: flow-down or flow-right.")] RegionLayout? layout = null,
+        [Description("Override the Mermaid direction: flow-down or flow-right; or loops for a causal-loop diagram (variables on a circle, loops found and named).")] RegionLayout? layout = null,
         [Description("Redraw the diagram with this title if it already exists (its shapes, groups and their connections are replaced).")] bool replace = false,
         [Description("Make this diagram the detail of a card or shape elsewhere (its id, cd_…): zooming into that card opens this diagram. Use it to go from an " +
             "overview to the inside of one component (system → container → component), C4-style.")] string? detailOf = null,
@@ -63,7 +66,9 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
             if (walkthrough is { Count: > 0 })
             {
                 // Mermaid node ids become this call's refs ("d:api"); titles and ids pass through for the server to resolve.
-                var steps = walkthrough.Select(s => new WalkthroughStep(s.Text, [.. (s.Highlight ?? []).Select(h => h.Contains(':') || h.Contains(' ') || h.Length == 11 && h[2] == '_' ? h : $"{refPrefix}:{h}")])).ToList();
+                string Name(string h) => h.Contains(':') || h.Contains(' ') || h.Length == 11 && h[2] == '_' ? h : $"{refPrefix}:{h}";
+                var steps = walkthrough.Select(s => new WalkthroughStep(s.Text, [.. (s.Highlight ?? []).Select(Name)],
+                    s.Marks is { Count: > 0 } marks ? [.. marks.Select(m => Map.Mark(m, Name))] : null)).ToList();
                 intents.Add(new AddWalkthroughIntent(refPrefix, string.IsNullOrWhiteSpace(walkthroughTitle) ? "How it works" : walkthroughTitle, steps, Replace: replace));
             }
             return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, requestId), expectedVersion, token));
@@ -75,7 +80,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
     [Description("Add a guided walkthrough to a region (usually a diagram): ordered steps, each with a short explanation and the items it is about. The owner plays it " +
         "like a slideshow: each step lights up its items (and the connections between them, animated) while everything else fades. Use it to explain a request path, " +
         "a lifecycle, a decision, or how the parts of an architecture work together: 4-10 steps, one idea each, in the order a newcomer needs them. " +
-        "Highlight by card or sub-region title, or by id (from get_canvas). With replace=true a walkthrough of the same title is rewritten.")]
+        "Highlight by card or sub-region title, or by id (from get_canvas). Steps can also mark items (down, slow, hot, added, removed, changed) to tell a scenario over the same diagram: \"the broker goes down\", \"orders back up\", \"the retry storm hits the database\". With replace=true a walkthrough of the same title is rewritten.")]
     public Task<McpResult<WriteResult>> AddWalkthrough(
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The region it walks through (id or title).")] string region,
@@ -88,7 +93,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         {
             Map.Count(steps.Count, Limits.WalkthroughSteps, "step");
             var intent = new AddWalkthroughIntent(Text.Required(region, "region", 200), Text.Required(title, "title", Limits.RegionTitle),
-                [.. steps.Select(s => new WalkthroughStep(s.Text, s.Highlight))], Replace: replace);
+                [.. steps.Select(s => new WalkthroughStep(s.Text, s.Highlight, s.Marks is { Count: > 0 } marks ? [.. marks.Select(m => Map.Mark(m))] : null))], Replace: replace);
             return WriteResult.From(await api.Batch(canvasId, new BatchRequest([intent]), expectedVersion, token));
         }, token);
 

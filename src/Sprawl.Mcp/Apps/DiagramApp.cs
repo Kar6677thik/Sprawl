@@ -101,9 +101,10 @@ public sealed class DiagramApp
     tx = cx - (cx - tx) * next / scale; ty = cy - (cy - ty) * next / scale; scale = next; setTransform();
   }
 
-  function lit(ids) {
+  function lit(ids, marks) {
     const svg = $("canvas").querySelector("svg");
-    const on = new Set(ids);
+    const on = new Set([...ids, ...marks.map((m) => m.target)]);
+    const states = new Map(marks.map((m) => [m.target, m.state]));
     for (const id of ids) for (const el of svg.querySelectorAll(`[data-group="${CSS.escape(id)}"]`)) on.add(el.dataset.id);
     const edges = new Set();
     for (const el of svg.querySelectorAll(".edge")) {
@@ -112,17 +113,23 @@ public sealed class DiagramApp
     }
     for (const el of svg.querySelectorAll(".item")) {
       const isLit = el.classList.contains("edge") ? edges.has(el.dataset.id) : on.has(el.dataset.id);
-      el.classList.toggle("lit", isLit); el.classList.toggle("dim", !isLit && !el.classList.contains("group"));
+      el.classList.toggle("lit", isLit); el.classList.toggle("dim", !isLit && !el.classList.contains("group") && !el.classList.contains("loop"));
+      for (const c of [...el.classList]) if (c.startsWith("mark-")) el.classList.remove(c);
+      if (states.has(el.dataset.id)) el.classList.add("mark-" + states.get(el.dataset.id));
     }
+  }
+
+  function clearMarks() {
+    for (const el of $("canvas").querySelectorAll("[class*='mark-']")) for (const c of [...el.classList]) if (c.startsWith("mark-")) el.classList.remove(c);
   }
 
   function showStep() {
     const svg = $("canvas").querySelector("svg");
     const w = view.walkthroughs[walk];
-    if (!w) { svg.classList.remove("walking"); return; }
+    if (!w) { svg.classList.remove("walking"); clearMarks(); return; }
     const s = w.steps[step];
     svg.classList.add("walking");
-    lit(s.highlight || []);
+    lit(s.highlight || [], s.marks || []);
     $("step-text").textContent = s.text.replace(/\*\*|__|`/g, "");
     $("count").textContent = `${step + 1} / ${w.steps.length}`;
     $("prev").disabled = step === 0;
@@ -190,8 +197,8 @@ public sealed class DiagramApp
   stage.addEventListener("wheel", (e) => { e.preventDefault(); const r = stage.getBoundingClientRect(); zoom(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   $("fit").onclick = fit; $("zin").onclick = () => zoom(1.25); $("zout").onclick = () => zoom(0.8);
   $("prev").onclick = () => { if (step > 0) { step--; showStep(); } };
-  $("next").onclick = () => { const w = view.walkthroughs[walk]; if (step < w.steps.length - 1) { step++; showStep(); } else { $("canvas").querySelector("svg").classList.remove("walking"); } };
-  $("all").onclick = () => $("canvas").querySelector("svg").classList.remove("walking");
+  $("next").onclick = () => { const w = view.walkthroughs[walk]; if (step < w.steps.length - 1) { step++; showStep(); } else { $("canvas").querySelector("svg").classList.remove("walking"); clearMarks(); } };
+  $("all").onclick = () => { $("canvas").querySelector("svg").classList.remove("walking"); clearMarks(); };
   $("which").onchange = (e) => { walk = Number(e.target.value); step = 0; showStep(); };
   document.addEventListener("keydown", (e) => { if (!view || walk < 0) return; if (e.key === "ArrowRight") $("next").click(); if (e.key === "ArrowLeft") $("prev").click(); });
   window.addEventListener("resize", () => fit());

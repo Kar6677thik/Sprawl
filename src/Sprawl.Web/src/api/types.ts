@@ -6,10 +6,10 @@ export type Placement = "auto" | "manual";
 export type Author = "human" | "ai";
 export type Shape = "rectangle" | "rounded" | "terminal" | "diamond" | "ellipse" | "circle" | "cylinder" | "parallelogram" | "hexagon"
   | "document" | "cloud" | "person" | "queue" | "subroutine" | "text";
-export type RegionLayout = "cards" | "flow-down" | "flow-right";
+export type RegionLayout = "cards" | "flow-down" | "flow-right" | "loops";
 export type LineStyle = "solid" | "dashed" | "dotted" | "thick";
 export type Ends = "none" | "end" | "start" | "both";
-export const isDiagram = (layout: RegionLayout | null | undefined) => layout === "flow-down" || layout === "flow-right";
+export const isDiagram = (layout: RegionLayout | null | undefined) => layout === "flow-down" || layout === "flow-right" || layout === "loops";
 
 export interface CanvasMeta {
   id: string;
@@ -95,9 +95,19 @@ export interface CanvasDocument {
   walkthroughs?: Walkthrough[] | null;
 }
 
+export type MarkState = "down" | "slow" | "hot" | "added" | "removed" | "changed";
+
+/** A scenario mark: how one item looks during a step ("the broker is down"), with an optional short note. */
+export interface StepMark {
+  target: string;
+  state: MarkState;
+  note?: string | null;
+}
+
 export interface WalkthroughStep {
   text: string;
   highlight?: string[] | null;
+  marks?: StepMark[] | null;
 }
 
 /** A guided tour of a region: steps of explanation, each lighting up what it talks about. */

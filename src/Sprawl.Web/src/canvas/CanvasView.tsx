@@ -8,7 +8,8 @@ import { Palette, type PaletteEntry, type PaletteMode } from "../palette/Palette
 import { CardPanel } from "./CardPanel";
 import { Composer, type ComposerMode } from "./Composer";
 import { edgeTypes } from "./edges";
-import { absolute, diagramMembers, LINK_EDGE_PREFIX, toEdges, toLinkEdges, toNodes, type SprawlNode } from "./flow";
+import { absolute, diagramMembers, LINK_EDGE_PREFIX, loopMembers, toEdges, toLinkEdges, toNodes, type SprawlNode } from "./flow";
+import { loopBadges } from "./loops";
 import { MermaidDialog, type MermaidDraft } from "./MermaidDialog";
 import { isDiagram, type RegionLayout } from "../api/types";
 import { regionAt, relativeTo } from "./geometry";
@@ -21,9 +22,9 @@ import type { Stroke } from "./ink";
 import { LinkContext, type LinkActions } from "./parts";
 import { LinkIndex, mayBeExternal } from "./semantics";
 import { warmTidy } from "./tidy";
-import { DetailContext, nodeTypes, WalkthroughContext, ZoomLevelContext } from "./nodes";
+import { DetailContext, LoopContext, MarkContext, nodeTypes, WalkthroughContext, ZoomLevelContext } from "./nodes";
 import { WalkthroughPlayer } from "./WalkthroughPlayer";
-import { litFor, walkthroughsOf } from "./walkthrough";
+import { litFor, marksOf, walkthroughsOf } from "./walkthrough";
 import { Shortcuts } from "./Shortcuts";
 import type { CanvasController } from "./useCanvas";
 import { LEVEL_ZOOM, levelFor, type ZoomLevel } from "./zoom";
@@ -96,7 +97,9 @@ function Flow({ canvas, initialFocus }: Props) {
   const linkIndex = useMemo(() => new LinkIndex(doc), [doc]);
   const textLinks = useMemo(() => linkIndex.links(doc), [doc, linkIndex]);
   const members = useMemo(() => diagramMembers(doc), [doc]);
-  const edges = useMemo(() => [...toEdges(doc.connections, level, members), ...toLinkEdges(textLinks, doc.connections, level)], [doc.connections, level, members, textLinks]);
+  const looped = useMemo(() => loopMembers(doc), [doc]);
+  const badges = useMemo(() => loopBadges(doc), [doc]);
+  const edges = useMemo(() => [...toEdges(doc.connections, level, members, looped), ...toLinkEdges(textLinks, doc.connections, level)], [doc.connections, level, looped, members, textLinks]);
 
   /** Dragging from one node's port to another connects them: an arrow inside a diagram, a plain relation elsewhere. */
   const onConnect = useCallback((link: FlowConnection) => {
@@ -282,7 +285,9 @@ function Flow({ canvas, initialFocus }: Props) {
   const walkthroughs = useMemo(() => walkthroughsOf(doc), [doc]);
   const walkRegions = useMemo(() => new Set(walkthroughs.map((w) => w.regionId)), [walkthroughs]);
   const active = walking ? walkthroughs.find((w) => w.id === walking.id) ?? null : null;
-  const lit = useMemo(() => active && walking ? litFor(doc, active.steps[walking.step]?.highlight ?? []) : null, [active, doc, walking]);
+  const step = active && walking ? active.steps[walking.step] : undefined;
+  const marks = useMemo(() => marksOf(step?.marks), [step]);
+  const lit = useMemo(() => step ? litFor(doc, [...(step.highlight ?? []), ...marks.keys()]) : null, [doc, marks, step]);
   const quizzed = useMemo(() => {
     if (!quiz) return null;
     const inside = new Set([quiz.regionId, ...doc.regions.filter((r) => r.parentId === quiz.regionId).map((r) => r.id)]);
@@ -291,14 +296,18 @@ function Flow({ canvas, initialFocus }: Props) {
   const quizNodes = useMemo(() => !quizzed || !quiz ? nodes : nodes.map((node) => quizzed.has(node.id)
     ? { ...node, className: `${node.className ?? ""} ${quiz.revealed.has(node.id) ? "is-revealed" : "is-hidden"}` } : node), [nodes, quiz, quizzed]);
   const shownNodes = useMemo(() => !lit ? quizNodes : quizNodes.map((node) => {
-    if (node.type === "region") return lit.nodes.has(node.id) ? { ...node, className: `${node.className ?? ""} is-lit` } : node;
-    return { ...node, className: `${node.className ?? ""} ${lit.nodes.has(node.id) ? "is-lit" : "is-dim"}` };
-  }), [lit, quizNodes]);
+    const mark = marks.get(node.id);
+    const marked = mark ? ` mark-${mark.state}` : "";
+    if (node.type === "region") return lit.nodes.has(node.id) ? { ...node, className: `${node.className ?? ""} is-lit${marked}` } : node;
+    return { ...node, className: `${node.className ?? ""} ${lit.nodes.has(node.id) ? "is-lit" : "is-dim"}${marked}` };
+  }), [lit, marks, quizNodes]);
   const quizEdges = useMemo(() => !quizzed ? edges : edges.map((edge) => quizzed.has(edge.source) && quizzed.has(edge.target)
     ? { ...edge, className: `${edge.className ?? ""} is-quiz` } : edge), [edges, quizzed]);
-  const shownEdges = useMemo(() => !lit ? quizEdges : quizEdges.map((edge) => lit.edges.has(edge.id)
-    ? { ...edge, animated: true, className: `${edge.className ?? ""} is-lit` }
-    : { ...edge, className: `${edge.className ?? ""} is-dim` }), [lit, quizEdges]);
+  const shownEdges = useMemo(() => !lit ? quizEdges : quizEdges.map((edge) => {
+    const mark = marks.get(edge.id);
+    if (mark) return { ...edge, animated: mark.state !== "down" && mark.state !== "removed", className: `${edge.className ?? ""} is-lit mark-${mark.state}`, ...(mark.note ? { label: mark.note } : {}) };
+    return lit.edges.has(edge.id) ? { ...edge, animated: true, className: `${edge.className ?? ""} is-lit` } : { ...edge, className: `${edge.className ?? ""} is-dim` };
+  }), [lit, marks, quizEdges]);
 
   const toggleSketch = useCallback(() => setSketch((on) => { localStorage.setItem("sprawl.sketch", on ? "0" : "1"); return !on; }), []);
 
@@ -313,7 +322,8 @@ function Flow({ canvas, initialFocus }: Props) {
   const frameStep = useCallback((walkthroughId: string, step: number) => {
     const w = walkthroughs.find((x) => x.id === walkthroughId);
     if (!w) return;
-    const ids = [...litFor(doc, w.steps[step]?.highlight ?? []).nodes].filter((id) => !id.startsWith("rg_") || (w.steps[step]?.highlight ?? []).includes(id));
+    const named = [...(w.steps[step]?.highlight ?? []), ...(w.steps[step]?.marks ?? []).map((m) => m.target)];
+    const ids = [...litFor(doc, named).nodes].filter((id) => !id.startsWith("rg_") || named.includes(id));
     const rects = (ids.length > 0 ? ids : [w.regionId]).map((id) => absolute(doc, id)).filter((r): r is NonNullable<typeof r> => !!r);
     if (rects.length === 0) return;
     const x = Math.min(...rects.map((r) => r.x)), y = Math.min(...rects.map((r) => r.y));
@@ -495,6 +505,7 @@ function Flow({ canvas, initialFocus }: Props) {
     } },
     { id: "layout-down", group: "Diagrams", label: "Make selected region a diagram (flows down)", run: () => setLayout("flow-down") },
     { id: "layout-right", group: "Diagrams", label: "Make selected region a diagram (flows right)", run: () => setLayout("flow-right") },
+    { id: "layout-loops", group: "Diagrams", label: "Make selected region a causal-loop diagram", hint: "label links + or −", run: () => setLayout("loops") },
     { id: "layout-cards", group: "Diagrams", label: "Turn selected diagram back into cards", run: () => setLayout("cards") },
     ...walkthroughs.map((w) => ({ id: `walk:${w.id}`, group: "Walkthroughs", label: `Play: ${w.title}`, hint: `${doc.regions.find((r) => r.id === w.regionId)?.title ?? ""} · ${w.steps.length} steps`, run: () => walk(w.id) })),
     ...walkthroughs.map((w) => ({ id: `walk-delete:${w.id}`, group: "Walkthroughs", label: `Delete walkthrough: ${w.title}`, run: () => void canvas.write([{ type: "deleteWalkthrough", id: w.id }], [w.id]) })),
@@ -599,6 +610,8 @@ function Flow({ canvas, initialFocus }: Props) {
   return (
     <ZoomLevelContext.Provider value={level}>
       <LinkContext.Provider value={linkActions}>
+      <LoopContext.Provider value={badges}>
+      <MarkContext.Provider value={marks}>
       <WalkthroughContext.Provider value={walkContext}>
       <DetailContext.Provider value={detailContext}>
       <div className={`flow level-${level}${connectFrom ? " is-connecting" : ""}${presenting !== null ? " is-presenting" : ""}${replaying ? " is-replaying" : ""}${ink ? " is-drawing" : ""}${walking ? " is-walking" : ""}${quiz ? " is-quizzing" : ""}${sketch ? " is-sketch" : ""}`} onPointerMove={(e) => { pointer.current = { x: e.clientX, y: e.clientY }; }}>
@@ -712,6 +725,8 @@ function Flow({ canvas, initialFocus }: Props) {
       {mermaidDraft && <MermaidDialog initial={mermaidDraft} onClose={() => setMermaidDraft(null)} onSubmit={(draft) => void drawMermaid({ ...draft, ...(mermaidDraft.near ? { near: mermaidDraft.near } : {}) })} />}
       </DetailContext.Provider>
       </WalkthroughContext.Provider>
+      </MarkContext.Provider>
+      </LoopContext.Provider>
       </LinkContext.Provider>
     </ZoomLevelContext.Provider>
   );

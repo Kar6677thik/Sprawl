@@ -240,8 +240,24 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             canvasId,
             region = "Produce path",
             title = "Failure modes",
-            steps = new[] { new { text = "If the broker is down the producer retries.", highlight = new[] { "Producer" } } }
+            steps = new[] { new { text = "If the broker is down the producer retries.", highlight = new[] { "Producer" }, marks = new[] { new { target = "Broker", state = "down", note = "unreachable" } } } }
         }));
+        var full0 = Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId, depth = "full" }));
+        Assert.Contains($"{{{broker} down \"unreachable\"}}", full0);
+
+        // A causal-loop diagram: variables on a circle, loops found and named; marks in add_diagram use Mermaid node ids.
+        Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new
+        {
+            canvasId,
+            title = "Consumer lag",
+            mermaid = "flowchart LR\n  lag[Lag] -->|+| consumers[Consumers added]\n  consumers -->|- delay| lag\n  lag -->|+| rebalances[Rebalances]\n  rebalances -->|+| lag",
+            layout = "loops",
+            walkthrough = new object[] { new { text = "Rebalances make lag worse.", marks = new[] { new { target = "rebalances", state = "hot" } } } }
+        }));
+        var loops = Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId }));
+        Assert.Contains("causal-loop diagram", loops);
+        Assert.Contains("~ loop B1 (balancing, with a delay): Lag → Consumers added → Lag", loops);
+        Assert.Contains("~ loop R1 (reinforcing): Lag → Rebalances → Lag", loops);
         var mermaid = Rpc.Text(await Rpc.Call(client, Everyday, "get_diagram", new { canvasId, region = "Produce path" }));
         Assert.StartsWith("flowchart LR", mermaid);
         Assert.Contains("==>|\"append\"|", mermaid);

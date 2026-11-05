@@ -326,3 +326,42 @@ input::placeholder { color: var(--text-faint); }
 .flow.is-sketch .shape-label, .flow.is-sketch .card-title, .flow.is-sketch .region-title, .flow.is-sketch .react-flow__edge-text {
   font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive; letter-spacing: 0;
 }
+
+/* Causal loops: + and − links, and a badge per loop (R reinforcing, B balancing). */
+.react-flow__edge.is-causal.is-minus .react-flow__edge-text { font-weight: 700; }
+.react-flow__edge.is-causal .react-flow__edge-text { font-weight: 700; font-size: 13px; }
+.loop-badge { position: absolute; pointer-events: auto; overflow: visible; }
+.loop-badge circle { fill: var(--surface); stroke-width: 1.6; }
+.loop-badge text { font: 700 12px/1 var(--font-sans, Inter, system-ui, sans-serif); }
+:root { --loop-r: oklch(0.58 0.15 55); --loop-b: oklch(0.52 0.1 205); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --loop-r: oklch(0.76 0.14 60); --loop-b: oklch(0.74 0.1 205); } }
+:root[data-theme="dark"] { --loop-r: oklch(0.76 0.14 60); --loop-b: oklch(0.74 0.1 205); }
+.loop-r path, .loop-r circle { stroke: var(--loop-r); } .loop-r text { fill: var(--loop-r); }
+.loop-b path, .loop-b circle { stroke: var(--loop-b); } .loop-b text { fill: var(--loop-b); }
+.loop-u path, .loop-u circle { stroke: var(--border-strong); } .loop-u text { fill: var(--text-muted); }
+
+/* Scenario marks during a walkthrough step: the state shows on the item, with a tag above it. */
+.mark-tag {
+  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; z-index: 2;
+  font-size: 11.5px; font-weight: 600; line-height: 1; padding: 4px 7px; border-radius: 999px; color: #fff; pointer-events: none;
+}
+.mark-tag-down { background: oklch(0.58 0.17 25); } .mark-tag-slow { background: oklch(0.62 0.13 75); color: #1d1500; }
+.mark-tag-hot { background: oklch(0.64 0.18 45); } .mark-tag-added { background: oklch(0.56 0.12 150); }
+.mark-tag-removed { background: var(--text-muted); } .mark-tag-changed { background: oklch(0.55 0.15 295); }
+.react-flow__node.mark-down .shape-svg > *, .react-flow__node.mark-down .card { stroke: oklch(0.58 0.17 25) !important; border-color: oklch(0.58 0.17 25) !important; stroke-dasharray: 6 4; }
+.react-flow__node.mark-down .shape-svg > * { stroke-width: 2.5; }
+.react-flow__node.mark-slow .shape-svg > *, .react-flow__node.mark-slow .card { stroke: oklch(0.62 0.13 75) !important; border-color: oklch(0.62 0.13 75) !important; stroke-width: 2.5; }
+.react-flow__node.mark-hot .shape-svg > *, .react-flow__node.mark-hot .card { stroke: oklch(0.64 0.18 45) !important; border-color: oklch(0.64 0.18 45) !important; stroke-width: 3; }
+.react-flow__node.mark-hot .shape-svg > :first-child, .react-flow__node.mark-hot .card { fill: oklch(0.64 0.18 45 / 0.14); background: color-mix(in oklch, oklch(0.64 0.18 45) 12%, var(--surface)); }
+.react-flow__node.mark-added .shape-svg > *, .react-flow__node.mark-added .card { stroke: oklch(0.56 0.12 150) !important; border-color: oklch(0.56 0.12 150) !important; stroke-width: 2.5; }
+.react-flow__node.mark-added .shape-svg > :first-child, .react-flow__node.mark-added .card { fill: oklch(0.56 0.12 150 / 0.12); background: color-mix(in oklch, oklch(0.56 0.12 150) 10%, var(--surface)); }
+.react-flow__node.mark-removed { opacity: 0.4; }
+.react-flow__node.mark-removed .shape-svg > *, .react-flow__node.mark-removed .card { stroke-dasharray: 3 4; border-style: dashed; }
+.react-flow__node.mark-changed .shape-svg > *, .react-flow__node.mark-changed .card { stroke: oklch(0.55 0.15 295) !important; border-color: oklch(0.55 0.15 295) !important; stroke-width: 2.5; }
+.react-flow__edge.mark-down .react-flow__edge-path { stroke: oklch(0.58 0.17 25) !important; stroke-dasharray: 2 6 !important; }
+.react-flow__edge.mark-slow .react-flow__edge-path { stroke: oklch(0.62 0.13 75) !important; }
+.react-flow__edge.mark-hot .react-flow__edge-path { stroke: oklch(0.64 0.18 45) !important; stroke-width: 3 !important; }
+.react-flow__edge.mark-added .react-flow__edge-path { stroke: oklch(0.56 0.12 150) !important; }
+.react-flow__edge.mark-removed .react-flow__edge-path { opacity: 0.4; stroke-dasharray: 3 4 !important; }
+.react-flow__edge.mark-changed .react-flow__edge-path { stroke: oklch(0.55 0.15 295) !important; }
+.flow.is-walking .react-flow__node-region:not(.is-lit) .loop-badge { opacity: 0.2; }

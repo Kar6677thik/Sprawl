@@ -63,3 +63,21 @@ export function relativeTo(doc: CanvasDocument, regionId: string | null, point: 
   const rect = regionRects(doc).get(regionId);
   return rect ? { x: Math.round(point.x - rect.x), y: Math.round(point.y - rect.y) } : { x: Math.round(point.x), y: Math.round(point.y) };
 }
+
+/**
+ * A causal link: a quadratic curve that bows to the left of its direction (outward, for a loop drawn clockwise), so the
+ * two links of a two-variable loop never overlap. Mirrors SvgRenderer.Curve on the server.
+ */
+export function curvedPath(source: Rect, target: Rect): { path: string; labelX: number; labelY: number } {
+  const a = center(source), b = center(target);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const cx = (a.x + b.x) / 2 + dy * 0.22, cy = (a.y + b.y) / 2 - dx * 0.22;
+  const clip = (r: Rect) => {
+    const c = center(r), ux = cx - c.x, uy = cy - c.y;
+    if (ux === 0 && uy === 0) return c;
+    const t = Math.min(ux === 0 ? Infinity : r.w / 2 / Math.abs(ux), uy === 0 ? Infinity : r.h / 2 / Math.abs(uy));
+    return { x: c.x + ux * t, y: c.y + uy * t };
+  };
+  const s = clip(source), t = clip(target);
+  return { path: `M${s.x} ${s.y} Q${cx} ${cy} ${t.x} ${t.y}`, labelX: 0.25 * s.x + 0.5 * cx + 0.25 * t.x, labelY: 0.25 * s.y + 0.5 * cy + 0.25 * t.y };
+}

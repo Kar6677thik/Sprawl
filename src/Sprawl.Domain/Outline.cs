@@ -93,8 +93,9 @@ public static class OutlineRenderer
             output.Append('\n').Append('#', level).Append(' ').Append(region.Title).Append("  ").Append(region.Id)
                 .Append("  (").Append(cards.Count).Append(cards.Count == 1 ? " card" : " cards")
                 .Append(sketches == 0 ? "" : sketches == 1 ? ", 1 sketch by the owner" : $", {sketches} sketches by the owner")
-                .Append(region.Layout switch { RegionLayouts.FlowDown => ", diagram, flows down", RegionLayouts.FlowRight => ", diagram, flows right", _ => "" }).Append(")\n");
+                .Append(region.Layout switch { RegionLayouts.FlowDown => ", diagram, flows down", RegionLayouts.FlowRight => ", diagram, flows right", RegionLayouts.Loops => ", causal-loop diagram", _ => "" }).Append(")\n");
             if (depth != OutlineDepths.Regions) WriteCards(cards, region.Id);
+            if (region.Layout == RegionLayouts.Loops) WriteLoops(region);
             foreach (var walkthrough in state.Walkthroughs.Values.Where(w => w.RegionId == region.Id).OrderBy(w => w.CreatedAt).ThenBy(w => w.Id, StringComparer.Ordinal))
             {
                 output.Append("~ walkthrough ").Append(walkthrough.Id).Append(' ').Append(walkthrough.Title).Append(" (").Append(walkthrough.Steps.Count)
@@ -102,7 +103,21 @@ public static class OutlineRenderer
                 if (depth != OutlineDepths.Full) continue;
                 foreach (var (step, i) in walkthrough.Steps.Select((s, i) => (s, i + 1)))
                     output.Append("  ").Append(i).Append(". ").Append(OneLine(step.Text))
-                        .Append((step.Highlight ?? []).Count == 0 ? "" : " [" + string.Join(", ", step.Highlight!) + "]").Append('\n');
+                        .Append((step.Highlight ?? []).Count == 0 ? "" : " [" + string.Join(", ", step.Highlight!) + "]")
+                        .Append((step.Marks ?? []).Count == 0 ? "" : " {" + string.Join(", ", step.Marks!.Select(m => $"{m.Target} {m.State}" + (m.Note is null ? "" : $" \"{m.Note}\""))) + "}").Append('\n');
+            }
+        }
+
+        void WriteLoops(Region region)
+        {
+            var loops = CausalLoops.Find(state, region.Id);
+            if (loops.Count == 0) { output.Append("~ no feedback loops yet (label links + or −)\n"); return; }
+            foreach (var loop in loops)
+            {
+                var kind = loop.Polarity switch { 'R' => "reinforcing", 'B' => "balancing", _ => "has an unsigned link, polarity unknown" };
+                var names = loop.Members.Select(id => state.Cards.GetValueOrDefault(id)?.Title ?? state.Regions.GetValueOrDefault(id)?.Title ?? id).ToList();
+                output.Append("~ loop ").Append(loop.Name).Append(" (").Append(kind).Append(loop.Delayed ? ", with a delay" : "").Append("): ")
+                    .Append(string.Join(" → ", names)).Append(" → ").Append(names[0]).Append('\n');
             }
         }
 

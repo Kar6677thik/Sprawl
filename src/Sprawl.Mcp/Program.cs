@@ -243,6 +243,11 @@ namespace Sprawl.Mcp
             - Explorables: a widget card (kind widget) is self-contained HTML/CSS/inline JS the owner can play with: change a parameter and watch the
               effect (a hash table resizing, a cache hit rate, an animation of an algorithm). It runs sandboxed, with no network and no access to
               Sprawl; use CSS variables --text, --muted, --accent, --border, --surface for colours. One widget per idea that is easier to feel than read.
+            - Systems: for feedback (vicious or virtuous circles, why a fix backfires, why growth stalls) draw a causal-loop diagram: add_diagram
+              with layout=loops and every edge labelled + or - ("delay" in a label marks a delay, e.g. - delay). Sprawl puts the variables on a circle and names each
+              loop R1 (reinforcing) or B1 (balancing); get_canvas lists them. Explain each loop in a walkthrough step that highlights it.
+            - Scenarios: a walkthrough step may mark items down, slow, hot, added, removed or changed (with a short note), so one architecture
+              tells "normal", "the broker is down" and "the retry storm" without copies. Use it for failure modes, migrations and before/after.
             - Teaching: the teach_me and quiz_me prompts turn a canvas into a lesson or a mock interview.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.

@@ -88,11 +88,18 @@ public sealed record Sketch(
     string CreatedBy,
     DateTimeOffset CreatedAt) : IEntity;
 
-/// <summary>One step of a walkthrough: what to say, and which cards, regions or connections to light up while saying it.</summary>
-public sealed record WalkthroughStep(string Text, IReadOnlyList<string>? Highlight = null)
+/// <summary>A scenario mark on one item for one step: its state (<see cref="MarkStates"/>) and an optional short note shown beside it.</summary>
+public sealed record StepMark(string Target, string State, string? Note = null);
+
+/// <summary>
+/// One step of a walkthrough: what to say, which cards, regions or connections to light up while saying it, and which
+/// of them to mark (down, slow, hot, added, removed, changed): a scenario told step by step over the same diagram.
+/// </summary>
+public sealed record WalkthroughStep(string Text, IReadOnlyList<string>? Highlight = null, IReadOnlyList<StepMark>? Marks = null)
 {
     public bool Equals(WalkthroughStep? other) =>
-        other is not null && Text == other.Text && (Highlight ?? []).SequenceEqual(other.Highlight ?? [], StringComparer.Ordinal);
+        other is not null && Text == other.Text && (Highlight ?? []).SequenceEqual(other.Highlight ?? [], StringComparer.Ordinal)
+        && (Marks ?? []).SequenceEqual(other.Marks ?? []);
 
     public override int GetHashCode() => HashCode.Combine(Text, Highlight?.Count ?? 0);
 }

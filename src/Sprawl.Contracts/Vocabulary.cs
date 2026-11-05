@@ -64,14 +64,30 @@ public static class Shapes
     public static readonly string[] All = [Rectangle, Rounded, Terminal, Diamond, Ellipse, Circle, Cylinder, Parallelogram, Hexagon, Document, Cloud, Person, Queue, Subroutine, Text];
 }
 
-/// <summary>How a region arranges its contents: cards in masonry columns, or a diagram laid out as a layered flow.</summary>
+/// <summary>
+/// How a region arranges its contents: cards in masonry columns, a diagram laid out as a layered flow, or a causal-loop
+/// diagram laid out around a circle (its connections signed + or −, its feedback loops found and named).
+/// </summary>
 public static class RegionLayouts
 {
     public const string Cards = "cards";
     public const string FlowDown = "flow-down";
     public const string FlowRight = "flow-right";
-    public static readonly string[] All = [Cards, FlowDown, FlowRight];
-    public static bool IsDiagram(string? layout) => layout is FlowDown or FlowRight;
+    public const string Loops = "loops";
+    public static readonly string[] All = [Cards, FlowDown, FlowRight, Loops];
+    public static bool IsDiagram(string? layout) => layout is FlowDown or FlowRight or Loops;
+}
+
+/// <summary>What a walkthrough step can say about an item: a scenario ("the broker is down") restyles it without copying the diagram.</summary>
+public static class MarkStates
+{
+    public const string Down = "down";        // failed, unavailable
+    public const string Slow = "slow";        // degraded, backed up
+    public const string Hot = "hot";          // the bottleneck, under load, where attention goes
+    public const string Added = "added";      // new in this scenario
+    public const string Removed = "removed";  // gone in this scenario
+    public const string Changed = "changed";  // different in this scenario
+    public static readonly string[] All = [Down, Slow, Hot, Added, Removed, Changed];
 }
 
 public static class LineStyles
@@ -183,5 +199,6 @@ public static class Limits
     public const int WalkthroughSteps = 40;
     public const int StepText = 2000;
     public const int StepHighlight = 40;
+    public const int MarkNote = 80;
     public const int WalkthroughsPerCanvas = 200;
 }

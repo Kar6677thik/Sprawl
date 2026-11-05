@@ -1,4 +1,4 @@
-import type { CanvasDocument, Walkthrough } from "../api/types";
+import type { CanvasDocument, StepMark, Walkthrough } from "../api/types";
 
 export interface Lit {
   /** Cards, regions and sketches shown at full strength. */
@@ -28,6 +28,11 @@ export function litFor(doc: Pick<CanvasDocument, "cards" | "regions" | "connecti
     if (nodes.has(c.sourceId) && nodes.has(c.targetId)) edges.add(c.id);
   }
   return { nodes, edges };
+}
+
+/** A step's scenario marks by item id. Marked items are lit too (see litFor's callers). */
+export function marksOf(marks: readonly StepMark[] | null | undefined): Map<string, StepMark> {
+  return new Map((marks ?? []).map((m) => [m.target, m]));
 }
 
 /** Walkthroughs in reading order: by region, then creation. */

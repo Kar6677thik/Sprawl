@@ -67,6 +67,18 @@ public enum RegionLayout
     [JsonStringEnumMemberName("cards")] Cards,
     [JsonStringEnumMemberName("flow-down")] FlowDown,
     [JsonStringEnumMemberName("flow-right")] FlowRight,
+    [JsonStringEnumMemberName("loops")] Loops,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<MarkState>))]
+public enum MarkState
+{
+    [JsonStringEnumMemberName("down")] Down,
+    [JsonStringEnumMemberName("slow")] Slow,
+    [JsonStringEnumMemberName("hot")] Hot,
+    [JsonStringEnumMemberName("added")] Added,
+    [JsonStringEnumMemberName("removed")] Removed,
+    [JsonStringEnumMemberName("changed")] Changed,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<LineStyle>))]
@@ -174,12 +186,19 @@ public sealed record ConnectionUpdate(
 
 public sealed record StepInput(
     [property: Description("What to say at this step: one idea, 1-3 sentences of markdown (at most 2000 characters). Say what happens and why, not what is on screen.")] string Text,
-    [property: Description("What to light up while saying it (everything else fades): card titles, sub-region titles, ids (cd_…, rg_…, cx_…), or, in add_diagram, the Mermaid node ids. Connections between two lit items light up and animate by themselves.")] IReadOnlyList<string>? Highlight = null);
+    [property: Description("What to light up while saying it (everything else fades): card titles, sub-region titles, ids (cd_…, rg_…, cx_…), or, in add_diagram, the Mermaid node ids. Connections between two lit items light up and animate by themselves.")] IReadOnlyList<string>? Highlight = null,
+    [property: Description("Optional scenario marks for this step: restyle items to show a state of the system without copying the diagram, e.g. the broker down, " +
+        "the database hot, a new cache added. Marked items are lit too. Name them as in highlight.")] IReadOnlyList<MarkInput>? Marks = null);
+
+public sealed record MarkInput(
+    [property: Description("The item to mark: a title, an id, or in add_diagram a Mermaid node id.")] string Target,
+    [property: Description("down (failed), slow (degraded, backed up), hot (the bottleneck, under load), added, removed, or changed.")] MarkState State,
+    [property: Description("Optional short note shown beside the item, up to 80 characters, e.g. \"503s\" or \"queue at 40k\".")] string? Note = null);
 
 public sealed record ConnectionPair(string From, string To, ConnectionKind? Kind = null);
 
 public sealed record ReorganizeAction(
-    [property: Description("moveCards {cardIds, toRegion, createIfMissing}; createRegion {title, ref?, parent?, layout?}; renameRegion {regionId, title}; nestRegion {regionId, parentId (omit to make top-level)}; mergeRegions {sourceIds, intoId}; mergeCards {cardIds, intoId, title?, body?}; deleteEmptyRegion {regionId}; setLayout {regionId, layout} turns a region into a diagram (flow-down / flow-right) or back into cards; deleteWalkthrough {intoId: the walkthrough id wt_…}.")]
+    [property: Description("moveCards {cardIds, toRegion, createIfMissing}; createRegion {title, ref?, parent?, layout?}; renameRegion {regionId, title}; nestRegion {regionId, parentId (omit to make top-level)}; mergeRegions {sourceIds, intoId}; mergeCards {cardIds, intoId, title?, body?}; deleteEmptyRegion {regionId}; setLayout {regionId, layout} turns a region into a diagram (flow-down / flow-right), a causal-loop diagram (loops), or back into cards; deleteWalkthrough {intoId: the walkthrough id wt_…}.")]
     ReorganizeType Type,
     IReadOnlyList<string>? CardIds = null,
     [property: Description("Target region: ref, id or title.")] string? ToRegion = null,
@@ -222,11 +241,15 @@ internal static class Map
     public static string? Shape(Shape? shape) => shape?.ToString().ToLowerInvariant();
     public static string? Line(LineStyle? line) => line?.ToString().ToLowerInvariant();
     public static string? Ends(Arrowheads? ends) => ends?.ToString().ToLowerInvariant();
+    public static StepMark Mark(MarkInput mark, Func<string, string>? name = null) =>
+        new((name ?? (n => n))(mark.Target), mark.State.ToString().ToLowerInvariant(), mark.Note);
+
     public static string? Layout(RegionLayout? layout) => layout switch
     {
         null => null,
         RegionLayout.FlowDown => RegionLayouts.FlowDown,
         RegionLayout.FlowRight => RegionLayouts.FlowRight,
+        RegionLayout.Loops => RegionLayouts.Loops,
         _ => RegionLayouts.Cards
     };
     public static string? Emphasis(Emphasis? emphasis) => emphasis?.ToString().ToLowerInvariant();

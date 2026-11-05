@@ -79,6 +79,7 @@ public static class DiagramLayout
         foreach (var sub in state.RegionsIn(region.Id).Where(r => r.Placement == Placements.Auto)) members.Add((sub.Id, sub.W, sub.H, sub.CreatedAt));
         if (members.Count == 0) return;
         members = [.. members.OrderBy(m => m.At).ThenBy(m => m.Id, StringComparer.Ordinal)];
+        if (region.Layout == RegionLayouts.Loops) { Circle(state, layout, region, members); return; }
 
         var items = members.Select(m => new Item(m.Id, down ? m.H : m.W, down ? m.W : m.H, false)).ToList();
         var byId = items.ToDictionary(i => i.Id, StringComparer.Ordinal);
@@ -128,6 +129,33 @@ public static class DiagramLayout
             }
             offset += thickness + RankGap;
         }
+        if (region.Cols != 1) state.Regions[region.Id] = state.Regions[region.Id] with { Cols = 1 };
+    }
+
+    public const int CircleGap = 64;
+
+    /// <summary>
+    /// A causal-loop diagram: members around a circle, clockwise from the top, in loop order, so each feedback loop reads
+    /// as a ring and its links bow outward. Each member takes an arc as long as its larger side plus a gap.
+    /// </summary>
+    private static void Circle(CanvasState state, LayoutEngine layout, Region region, List<(string Id, int W, int H, DateTimeOffset At)> members)
+    {
+        var sizes = members.ToDictionary(m => m.Id, m => (m.W, m.H), StringComparer.Ordinal);
+        var order = CausalLoops.CircleOrder(state, region.Id, [.. members.Select(m => m.Id)]);
+        var arcs = order.Select(id => (double)Math.Max(sizes[id].W, sizes[id].H) + CircleGap).ToList();
+        var radius = order.Count == 1 ? 0 : Math.Max(120, arcs.Sum() / (2 * Math.PI));
+        var centres = new List<(string Id, double X, double Y)>();
+        double walked = 0;
+        for (var i = 0; i < order.Count; i++)
+        {
+            var angle = -Math.PI / 2 + (walked + arcs[i] / 2) / Math.Max(1, arcs.Sum()) * 2 * Math.PI;
+            walked += arcs[i];
+            centres.Add((order[i], radius * Math.Cos(angle), radius * Math.Sin(angle)));
+        }
+        var minX = centres.Min(c => c.X - sizes[c.Id].W / 2.0);
+        var minY = centres.Min(c => c.Y - sizes[c.Id].H / 2.0);
+        foreach (var (id, x, y) in centres)
+            Move(state, layout, id, (int)Math.Round(Geometry.Padding + x - sizes[id].W / 2.0 - minX), (int)Math.Round(Geometry.Header + y - sizes[id].H / 2.0 - minY));
         if (region.Cols != 1) state.Regions[region.Id] = state.Regions[region.Id] with { Cols = 1 };
     }
 

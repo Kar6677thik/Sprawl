@@ -2,6 +2,7 @@ import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import { isDiagram, type Card, type CanvasDocument, type Connection, type Region, type Sketch } from "../api/types";
 import { orderRegions } from "./document";
 import type { ZoomLevel } from "./zoom";
+import { sign } from "./loops";
 
 /** A descendant's rectangle relative to its top-level region, drawn as the zoomed-out miniature. */
 export type MiniBox = { id: string; x: number; y: number; w: number; h: number; kind: "card" | "region" };
@@ -101,27 +102,42 @@ const ARROW = { type: MarkerType.ArrowClosed, width: 14, height: 14 } as const;
  * Connections as edges. Arrowheads follow the connection's ends, or its kind when unset; the line style shows as a dash
  * pattern or weight. Inside diagrams edges run orthogonally and show their labels at every reading zoom.
  */
-export function toEdges(connections: Connection[], level: ZoomLevel, members: ReadonlySet<string> = new Set()): Edge[] {
+export function toEdges(connections: Connection[], level: ZoomLevel, members: ReadonlySet<string> = new Set(), loopMembers: ReadonlySet<string> = new Set()): Edge[] {
   return connections.map((connection) => {
     const ends = connection.ends ?? (DIRECTIONAL.has(connection.kind) ? "end" : "none");
-    const orthogonal = members.has(connection.sourceId) && members.has(connection.targetId);
-    const showLabel = connection.label && (level === "near" || (orthogonal && level === "mid"));
+    const curved = loopMembers.has(connection.sourceId) && loopMembers.has(connection.targetId);
+    const orthogonal = !curved && members.has(connection.sourceId) && members.has(connection.targetId);
+    const showLabel = connection.label && (level === "near" || ((orthogonal || curved) && level === "mid"));
     return {
     id: connection.id,
     source: connection.sourceId,
     target: connection.targetId,
     type: "floating",
-    className: `edge-${connection.kind} line-${connection.line ?? "solid"}${orthogonal ? " is-diagram" : ""}`,
+    className: `edge-${connection.kind} line-${connection.line ?? "solid"}${orthogonal || curved ? " is-diagram" : ""}${curved ? ` is-causal${polarityClass(connection.label)}` : ""}`,
     ...(ends === "end" || ends === "both" ? { markerEnd: ARROW } : {}),
     ...(ends === "start" || ends === "both" ? { markerStart: ARROW } : {}),
     ...(showLabel ? { label: connection.label } : {}),
-    data: { kind: connection.kind, orthogonal },
+    data: { kind: connection.kind, orthogonal, curved },
     // Layers (with zIndexMode="manual"): regions 0, sub-regions 1, edges 2, cards 3. Lines never cross card text.
     zIndex: 2,
     selectable: true,
     focusable: true,
     };
   });
+}
+
+function polarityClass(label: string | null): string {
+  const s = sign(label);
+  return s > 0 ? " is-plus" : s < 0 ? " is-minus" : "";
+}
+
+/** Ids of the direct members of causal-loop regions: their connections curve around the loop. */
+export function loopMembers(doc: Pick<CanvasDocument, "regions" | "cards">): Set<string> {
+  const loops = new Set(doc.regions.filter((r) => r.layout === "loops").map((r) => r.id));
+  const members = new Set<string>();
+  for (const card of doc.cards) if (card.regionId && loops.has(card.regionId)) members.add(card.id);
+  for (const region of doc.regions) if (region.parentId && loops.has(region.parentId)) members.add(region.id);
+  return members;
 }
 
 /** Edge ids for `[[links]]` drawn from card text; they are not connections and cannot be selected or deleted. */

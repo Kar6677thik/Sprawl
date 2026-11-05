@@ -615,7 +615,18 @@ public sealed partial class BatchEngine
                     ?? throw SprawlException.NotFound($"Step {number}: nothing in '{region.Title}' is called '{name}'. Use a card or region title, a ref from this call, or an id.");
                 if (!ids.Contains(id)) ids.Add(id);
             }
-            steps.Add(new WalkthroughStep(text, ids));
+            var marks = new List<StepMark>();
+            if ((step.Marks ?? []).Count > Limits.StepHighlight) throw SprawlException.Limit($"Step {number}: mark at most {Limits.StepHighlight} items.");
+            foreach (var mark in step.Marks ?? [])
+            {
+                var target = ResolveHighlight((mark.Target ?? "").Trim(), scope)
+                    ?? throw SprawlException.NotFound($"Step {number}: nothing in '{region.Title}' is called '{mark.Target}' to mark.");
+                var markState = Text.OneOf((mark.State ?? "").Trim().ToLowerInvariant(), MarkStates.All, "mark state");
+                var note = string.IsNullOrWhiteSpace(mark.Note) ? null : Text.Title(mark.Note, Limits.MarkNote, "mark note");
+                if (marks.Any(m => m.Target == target)) throw SprawlException.Invalid($"Step {number}: '{mark.Target}' is marked twice.");
+                marks.Add(new StepMark(target, markState, note));
+            }
+            steps.Add(new WalkthroughStep(text, ids, marks.Count == 0 ? null : marks));
         }
         var existing = state.Walkthroughs.Values.FirstOrDefault(w => w.RegionId == region.Id && Text.SameTitle(w.Title, title));
         if (existing is not null)

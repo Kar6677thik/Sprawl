@@ -7,6 +7,8 @@ import { shapeOutline } from "./shapes";
 import { MermaidView } from "./MermaidView";
 import { ChartView } from "./ChartView";
 import { currentTheme } from "./MermaidView";
+import type { LoopBadge } from "./loops";
+import type { StepMark } from "../api/types";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
 
@@ -32,6 +34,40 @@ function BackLink({ regionId }: { regionId: string }) {
   return (
     <button type="button" className="detail-back" title={`Back to ${owner.title}`} onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); details.back(owner.id); }}>↑ {owner.title}</button>
+  );
+}
+
+/** Loop badges (R1, B1) per causal-loop region, in region coordinates. */
+export const LoopContext = createContext<ReadonlyMap<string, LoopBadge[]>>(new Map());
+
+/** The current walkthrough step's scenario marks, by item id. */
+export const MarkContext = createContext<ReadonlyMap<string, StepMark>>(new Map());
+
+const MARK_LABEL: Record<StepMark["state"], string> = { down: "Down", slow: "Slow", hot: "Hot", added: "New", removed: "Removed", changed: "Changed" };
+
+/** A scenario mark's tag above a marked item: its state, and its note when it has one. */
+function MarkTag({ id }: { id: string }) {
+  const mark = useContext(MarkContext).get(id);
+  if (!mark) return null;
+  return <span className={`mark-tag mark-tag-${mark.state}`}>{MARK_LABEL[mark.state]}{mark.note ? ` · ${mark.note}` : ""}</span>;
+}
+
+function LoopBadges({ regionId }: { regionId: string }) {
+  const badges = useContext(LoopContext).get(regionId) ?? [];
+  const kind = (b: LoopBadge) => b.polarity === "R" ? "reinforcing" : b.polarity === "B" ? "balancing" : "polarity unknown (a link has no + or −)";
+  return (
+    <>
+      {badges.map((b) => (
+        <svg key={b.name} className={`loop-badge loop-${(b.polarity ?? "u").toLowerCase()}`} style={{ left: b.x - 22, top: b.y - 22 }} width="44" height="44" viewBox="-22 -22 44 44"
+          role="img" aria-label={`Loop ${b.name}, ${kind(b)}${b.delayed ? ", with a delay" : ""}`}>
+          <title>{`${b.name}: ${kind(b)}${b.delayed ? ", with a delay" : ""}`}</title>
+          <path d={b.clockwise ? "M19 0 A19 19 0 1 1 0 -19" : "M-19 0 A19 19 0 1 0 0 -19"} fill="none" strokeWidth="1.6" />
+          <path d={b.clockwise ? "M-5 -23 L1 -19 L-5 -15" : "M5 -23 L-1 -19 L5 -15"} fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <circle r="14" />
+          <text y="4.5" textAnchor="middle">{b.name}</text>
+        </svg>
+      ))}
+    </>
   );
 }
 
@@ -79,7 +115,7 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
         </div>
       </div>
     );
-  const diagram = region.layout === "flow-down" || region.layout === "flow-right";
+  const diagram = region.layout === "flow-down" || region.layout === "flow-right" || region.layout === "loops";
   return (
     <div className={`region${region.parentId ? " is-sub" : ""}${diagram ? " is-diagram" : ""}${data.group ? " is-group" : ""}${selected ? " is-selected" : ""}`}
       data-tint={region.tint ?? undefined}>
@@ -87,8 +123,10 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
       {data.group && <Ports />}
       <header className="region-header">
         {diagram && (
-          <svg className="region-flow" viewBox="0 0 12 12" width="12" height="12" aria-label={region.layout === "flow-right" ? "Diagram, flows right" : "Diagram, flows down"}>
-            <path d={region.layout === "flow-right" ? "M1.5 6h8M7 3.5 9.5 6 7 8.5" : "M6 1.5v8M3.5 7 6 9.5 8.5 7"} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          <svg className="region-flow" viewBox="0 0 12 12" width="12" height="12"
+            aria-label={region.layout === "loops" ? "Causal-loop diagram" : region.layout === "flow-right" ? "Diagram, flows right" : "Diagram, flows down"}>
+            <path d={region.layout === "loops" ? "M10 6a4 4 0 1 1-1.2-2.85M9.2 1.2v2.2H7" : region.layout === "flow-right" ? "M1.5 6h8M7 3.5 9.5 6 7 8.5" : "M6 1.5v8M3.5 7 6 9.5 8.5 7"}
+              fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
         <span className="region-title">{region.title}</span>
@@ -97,6 +135,8 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
         <BackLink regionId={region.id} />
         <PlayButton regionId={region.id} />
       </header>
+      {region.layout === "loops" && <LoopBadges regionId={region.id} />}
+      <MarkTag id={region.id} />
     </div>
   );
 });
@@ -131,6 +171,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
     return (
       <article className={`card kind-${card.kind} is-content${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`} data-tint={card.tint ?? undefined} aria-label={card.title}>
         <DetailBadge regionId={card.detail} />
+        <MarkTag id={card.id} />
         <NodeResizer isVisible={selected} minWidth={240} minHeight={160} lineClassName="resize-line" handleClassName="resize-handle" />
         <Anchors />
         {diagram && <Ports />}
@@ -157,6 +198,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
         <Anchors />
         <Ports />
         <DetailBadge regionId={card.detail} />
+        <MarkTag id={card.id} />
         <svg className="shape-svg" width={card.w} height={card.h} viewBox={`0 0 ${card.w} ${card.h}`} aria-hidden="true">
           {shapeOutline(card.shape, card.w, card.h, 1.5)}
         </svg>
@@ -174,6 +216,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
       <Anchors />
       {diagram && <Ports />}
       <DetailBadge regionId={card.detail} />
+      <MarkTag id={card.id} />
       {card.createdBy === "ai" && <span className="ai-mark" title="Added by Claude" aria-label="Added by Claude" />}
       {level !== "far" && (
         <>

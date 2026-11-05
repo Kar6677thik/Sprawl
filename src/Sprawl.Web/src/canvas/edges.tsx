@@ -1,5 +1,5 @@
 import { BaseEdge, getBezierPath, getSmoothStepPath, Position, useInternalNode, type EdgeProps } from "@xyflow/react";
-import { floatingEndpoints, type Rect, type Side } from "./geometry";
+import { curvedPath, floatingEndpoints, type Rect, type Side } from "./geometry";
 
 const POSITION: Record<Side, Position> = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
 
@@ -20,7 +20,11 @@ export function FloatingEdge({ id, source, target, markerEnd, markerStart, style
     targetX: tx, targetY: ty, targetPosition: POSITION[targetSide],
   };
   // Diagram edges run at right angles with rounded corners, as in draw.io; everything else stays a soft curve.
-  const [path, labelX, labelY] = data?.["orthogonal"] ? getSmoothStepPath({ ...ends, borderRadius: 10, offset: 18 }) : getBezierPath(ends);
+  // Causal links curve around their loop; other diagram edges run at right angles with rounded corners, as in draw.io;
+  // everything else stays a soft curve.
+  const curve = data?.["curved"] ? curvedPath(rect(from), rect(to)) : null;
+  const [path, labelX, labelY] = curve ? [curve.path, curve.labelX, curve.labelY]
+    : data?.["orthogonal"] ? getSmoothStepPath({ ...ends, borderRadius: 10, offset: 18 }) : getBezierPath(ends);
   return (
     <BaseEdge
       id={id}
