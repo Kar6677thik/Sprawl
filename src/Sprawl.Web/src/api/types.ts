@@ -4,6 +4,12 @@ export type CardKind = "idea" | "note" | "question" | "link" | "code";
 export type ConnectionKind = "relates" | "leads-to" | "contradicts" | "example-of" | "depends-on";
 export type Placement = "auto" | "manual";
 export type Author = "human" | "ai";
+export type Shape = "rectangle" | "rounded" | "terminal" | "diamond" | "ellipse" | "circle" | "cylinder" | "parallelogram" | "hexagon"
+  | "document" | "cloud" | "person" | "queue" | "subroutine" | "text";
+export type RegionLayout = "cards" | "flow-down" | "flow-right";
+export type LineStyle = "solid" | "dashed" | "dotted" | "thick";
+export type Ends = "none" | "end" | "start" | "both";
+export const isDiagram = (layout: RegionLayout | null | undefined) => layout === "flow-down" || layout === "flow-right";
 
 export interface CanvasMeta {
   id: string;
@@ -30,6 +36,7 @@ export interface Region {
   createdBy: Author;
   createdAt: string;
   updatedAt: string;
+  layout?: RegionLayout | null;
 }
 
 export interface Card {
@@ -53,6 +60,7 @@ export interface Card {
   updatedBy: Author;
   createdAt: string;
   updatedAt: string;
+  shape?: Shape | null;
 }
 
 export interface Connection {
@@ -63,6 +71,8 @@ export interface Connection {
   label: string | null;
   createdBy: Author;
   createdAt: string;
+  line?: LineStyle | null;
+  ends?: Ends | null;
 }
 
 export interface LayoutWarning {
@@ -161,15 +171,17 @@ export interface LayoutItem {
 }
 
 export type Intent =
-  | { type: "addRegion"; title: string; ref?: string; parent?: string; tint?: string; near?: string }
-  | { type: "addCard"; kind: CardKind; title: string; region?: string; ref?: string; body?: string; url?: string; language?: string; at?: { x: number; y: number } }
+  | { type: "addRegion"; title: string; ref?: string; parent?: string; tint?: string; near?: string; layout?: RegionLayout }
+  | { type: "addCard"; kind: CardKind; title: string; region?: string; ref?: string; body?: string; url?: string; language?: string; at?: { x: number; y: number }; shape?: Shape }
   | { type: "moveCards"; ids: string[]; toRegion: string }
-  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string }
-  | { type: "connect"; from: string; to: string; kind?: ConnectionKind; label?: string }
+  | { type: "updateCard"; id: string; title?: string; body?: string; kind?: CardKind; url?: string; language?: string; emphasis?: string; tint?: string; shape?: Shape | "none" }
+  | { type: "connect"; from: string; to: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
+  | { type: "updateConnection"; id: string; kind?: ConnectionKind; label?: string; line?: LineStyle; ends?: Ends }
+  | { type: "addDiagram"; title: string; mermaid: string; ref?: string; parent?: string; near?: string; layout?: RegionLayout; replace?: boolean }
   | { type: "disconnect"; id?: string; from?: string; to?: string; kind?: ConnectionKind }
   | { type: "deleteCards"; ids: string[] }
   | { type: "deleteRegion"; id: string }
-  | { type: "updateRegion"; id: string; title?: string; tint?: string }
+  | { type: "updateRegion"; id: string; title?: string; tint?: string; layout?: RegionLayout }
   | { type: "updateCanvas"; title?: string; description?: string; tags?: string[]; collection?: string; clearCollection?: boolean; pinned?: boolean; archived?: boolean }
   | { type: "setLayout"; items: LayoutItem[] }
   | { type: "unpin"; ids: string[] }

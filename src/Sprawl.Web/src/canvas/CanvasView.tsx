@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { applyNodeChanges, Background, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Node, type NodeChange } from "@xyflow/react";
+import { applyNodeChanges, Background, ConnectionLineType, ConnectionMode, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Connection as FlowConnection, type Node, type NodeChange } from "@xyflow/react";
 import { api } from "../api/client";
 import type { CanvasDocument, CardKind, LayoutItem } from "../api/types";
 import { navigate } from "../router";
@@ -8,7 +8,9 @@ import { Palette, type PaletteEntry, type PaletteMode } from "../palette/Palette
 import { CardPanel } from "./CardPanel";
 import { Composer, type ComposerMode } from "./Composer";
 import { edgeTypes } from "./edges";
-import { absolute, LINK_EDGE_PREFIX, toEdges, toLinkEdges, toNodes, type SprawlNode } from "./flow";
+import { absolute, diagramMembers, LINK_EDGE_PREFIX, toEdges, toLinkEdges, toNodes, type SprawlNode } from "./flow";
+import { MermaidDialog, type MermaidDraft } from "./MermaidDialog";
+import { isDiagram, type RegionLayout } from "../api/types";
 import { regionAt, relativeTo } from "./geometry";
 import { HistoryPanel } from "./HistoryPanel";
 import { InsightsPanel } from "./InsightsPanel";
@@ -71,6 +73,7 @@ function Flow({ canvas, initialFocus }: Props) {
   const [shortcuts, setShortcuts] = useState(false);
   const [presenting, setPresenting] = useState<number | null>(null);
   const [ink, setInk] = useState<{ tint: InkTint; width: number } | null>(null);
+  const [mermaidDraft, setMermaidDraft] = useState<(MermaidDraft & { near?: string }) | null>(null);
   const dragging = useRef(false);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const focusedInitial = useRef(false);
@@ -87,7 +90,15 @@ function Flow({ canvas, initialFocus }: Props) {
 
   const linkIndex = useMemo(() => new LinkIndex(doc), [doc]);
   const textLinks = useMemo(() => linkIndex.links(doc), [doc, linkIndex]);
-  const edges = useMemo(() => [...toEdges(doc.connections, level), ...toLinkEdges(textLinks, doc.connections, level)], [doc.connections, level, textLinks]);
+  const members = useMemo(() => diagramMembers(doc), [doc]);
+  const edges = useMemo(() => [...toEdges(doc.connections, level, members), ...toLinkEdges(textLinks, doc.connections, level)], [doc.connections, level, members, textLinks]);
+
+  /** Dragging from one node's port to another connects them: an arrow inside a diagram, a plain relation elsewhere. */
+  const onConnect = useCallback((link: FlowConnection) => {
+    if (!link.source || !link.target || link.source === link.target || replaying) return;
+    const both = members.has(link.source) && members.has(link.target);
+    void canvas.write([{ type: "connect", from: link.source, to: link.target, kind: both ? "leads-to" : "relates" }], [link.source, link.target]);
+  }, [canvas, members, replaying]);
   const onNodesChange = useCallback((changes: NodeChange<SprawlNode>[]) => setNodes((current) => applyNodeChanges(changes, current)), []);
 
   /** Centre an item at reading zoom (works from the zoomed-out map, where cards are not nodes). */
@@ -198,8 +209,10 @@ function Flow({ canvas, initialFocus }: Props) {
     setComposing(null);
     if (!target || target.kind !== "card") return;
     // A selected region gets an auto-placed card; a card dropped "here" on the canvas or in a region keeps that spot.
+    const inDiagram = target.region !== undefined && isDiagram(doc.regions.find((r) => r.id === target.region)?.layout);
     const result = await canvas.write([{
       type: "addCard", ref: "new", kind, title,
+      ...(inDiagram ? { shape: kind === "question" ? "diamond" as const : "rounded" as const } : {}),
       ...(target.region ? { region: target.region } : {}),
       ...(target.at ? { at: target.at } : {}),
     }], []);
@@ -207,7 +220,7 @@ function Flow({ canvas, initialFocus }: Props) {
     // Capture keeps the composer open for the next thought; a normal quick-add opens the new card.
     if (target.capture) { if (id) canvas.say(`Captured to ${INBOX}.`, { focus: id }); setComposing({ ...target }); }
     else if (id) setPanel({ kind: "card", id });
-  }, [canvas, composing]);
+  }, [canvas, composing, doc.regions]);
 
   const createRegion = useCallback(async (title: string) => {
     setComposing(null);
@@ -315,6 +328,36 @@ function Flow({ canvas, initialFocus }: Props) {
     return entries;
   }, [canvas, doc.meta.collection, saveSearches, saved]);
 
+  const selectedRegion = useCallback(() => {
+    const selected = selection().nodes[0];
+    const id = selected?.startsWith("rg_") ? selected : doc.cards.find((c) => c.id === selected)?.regionId ?? null;
+    return id ? doc.regions.find((r) => r.id === id) ?? null : null;
+  }, [doc.cards, doc.regions, selection]);
+
+  const setLayout = useCallback((layout: RegionLayout) => {
+    const region = selectedRegion();
+    if (!region) { canvas.say("Select a region (or a card in it) first."); return; }
+    void canvas.write([{ type: "updateRegion", id: region.id, layout }], [region.id]);
+  }, [canvas, selectedRegion]);
+
+  const editMermaid = useCallback(() => {
+    const region = selectedRegion();
+    if (!region) { setMermaidDraft({ title: "", mermaid: "", replace: false }); return; }
+    void api.mermaid(doc.meta.id, region.id).then((mermaid) => setMermaidDraft({ title: region.title, mermaid, replace: true }),
+      () => canvas.say("Could not read that diagram."));
+  }, [canvas, doc.meta.id, selectedRegion]);
+
+  const drawMermaid = useCallback(async (draft: MermaidDraft & { near?: string }) => {
+    const result = await canvas.write([{
+      type: "addDiagram", title: draft.title, mermaid: draft.mermaid, ref: "d", replace: draft.replace,
+      ...(draft.near ? { near: draft.near } : {}),
+    }], []);
+    if (!result) return;
+    setMermaidDraft(null);
+    const region = doc.regions.find((r) => r.title.toLowerCase() === draft.title.toLowerCase())?.id;
+    window.setTimeout(() => { const id = region ?? Object.entries(result.refs).find(([k]) => k === "d")?.[1]; if (id) focus(id); }, 450);
+  }, [canvas, doc.regions, focus]);
+
   const tidySelection = useCallback(() => {
     const selected = selection().nodes[0];
     const region = selected?.startsWith("rg_") ? selected : doc.cards.find((c) => c.id === selected)?.regionId ?? null;
@@ -342,6 +385,19 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "review", group: "Actions", label: "Review open questions", keys: "R", run: () => setPanel({ kind: "review" }) },
     { id: "replay", group: "Actions", label: "Replay history", hint: "watch the canvas grow", keys: "⇧H", run: () => { setPanel(null); setReplaying(true); } },
     { id: "draw", group: "Actions", label: "Draw", hint: "freehand sketch", keys: "D", run: () => setInk({ tint: null, width: 2 }) },
+    { id: "diagram-new", group: "Diagrams", label: "New diagram from Mermaid", hint: "architecture, flow, flowchart", keys: "M", run: () => {
+      const near = selectedRegion();
+      setMermaidDraft({ title: "", mermaid: "", replace: false, ...(near && !near.parentId ? { near: near.id } : {}) });
+    } },
+    { id: "diagram-edit", group: "Diagrams", label: "Edit selected diagram as Mermaid", run: editMermaid },
+    { id: "diagram-copy", group: "Diagrams", label: "Copy selected region as Mermaid", run: () => {
+      const region = selectedRegion();
+      if (!region) { canvas.say("Select a region first."); return; }
+      void api.mermaid(doc.meta.id, region.id).then((text) => navigator.clipboard.writeText(text)).then(() => canvas.say("Copied as Mermaid."), () => canvas.say("Could not copy."));
+    } },
+    { id: "layout-down", group: "Diagrams", label: "Make selected region a diagram (flows down)", run: () => setLayout("flow-down") },
+    { id: "layout-right", group: "Diagrams", label: "Make selected region a diagram (flows right)", run: () => setLayout("flow-right") },
+    { id: "layout-cards", group: "Diagrams", label: "Turn selected diagram back into cards", run: () => setLayout("cards") },
     { id: "present", group: "Actions", label: "Present", hint: "regions one by one", keys: "P", run: () => present(0) },
     { id: "export-md", group: "Actions", label: "Export as Markdown", run: () => download("markdown") },
     { id: "export-canvas", group: "Actions", label: "Export as JSON Canvas", hint: "Obsidian .canvas", run: () => download("json-canvas") },
@@ -353,7 +409,7 @@ function Flow({ canvas, initialFocus }: Props) {
     { id: "home", group: "Actions", label: "All canvases", run: () => navigate("/") },
     { id: "backup", group: "Actions", label: "Back up now", hint: "verified copy of every canvas", run: () => void api.backupNow()
       .then((r) => canvas.say(`Backed up: ${r.file}`), (e: unknown) => canvas.say(e instanceof Error ? e.message : "Backup failed.")) },
-  ], [canvas, doc.meta.id, download, exportPng, flow, openPalette, present, saved, startCard, tidySelection]);
+  ], [canvas, doc.meta.id, download, editMermaid, exportPng, flow, openPalette, present, saved, selectedRegion, setLayout, startCard, tidySelection]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -381,7 +437,7 @@ function Flow({ canvas, initialFocus }: Props) {
       if (mod && event.shiftKey && key.toLowerCase() === "f") { event.preventDefault(); openPalette("global"); return; }
       // Keys typed into a field are text, not shortcuts. (The target is not always an element, e.g. the window.)
       const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true]") !== null;
-      if (typing || palette || shortcuts || composing) return;
+      if (typing || palette || shortcuts || composing || mermaidDraft) return;
       if (mod && key.toLowerCase() === "z") { event.preventDefault(); void (event.shiftKey ? canvas.redo() : canvas.undo()); return; }
       if (mod && key.toLowerCase() === "y") { event.preventDefault(); void canvas.redo(); return; }
       if (mod || event.altKey) return;
@@ -393,6 +449,7 @@ function Flow({ canvas, initialFocus }: Props) {
         case "/": event.preventDefault(); openPalette("canvas"); return;
         case "#": event.preventDefault(); openPalette("canvas", "#"); return;
         case "p": present(0); return;
+        case "m": event.preventDefault(); { const near = selectedRegion(); setMermaidDraft({ title: "", mermaid: "", replace: false, ...(near && !near.parentId ? { near: near.id } : {}) }); } return;
         case "d": setInk({ tint: null, width: 2 }); return;
         case "I": event.preventDefault(); setComposing(CAPTURE); return;
         case "r": setPanel((p) => (p?.kind === "review" ? null : { kind: "review" })); return;
@@ -413,7 +470,7 @@ function Flow({ canvas, initialFocus }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvas, composing, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selection, shortcuts, startCard, steps.length, tidySelection]);
+  }, [canvas, composing, mermaidDraft, deleteSelection, flow, focus, openPalette, palette, present, presenting, replaying, ink, selectedRegion, selection, shortcuts, startCard, steps.length, tidySelection]);
 
   const connectTitle = connectFrom ? doc.cards.find((c) => c.id === connectFrom)?.title ?? doc.regions.find((r) => r.id === connectFrom)?.title : null;
 
@@ -438,7 +495,11 @@ function Flow({ canvas, initialFocus }: Props) {
           minZoom={0.05}
           maxZoom={2}
           onlyRenderVisibleElements
-          nodesConnectable={false}
+          nodesConnectable={!replaying}
+          onConnect={onConnect}
+          connectionMode={ConnectionMode.Loose}
+          connectionLineType={ConnectionLineType.SmoothStep}
+          connectionRadius={28}
           elevateNodesOnSelect={false}
           deleteKeyCode={null}
           zoomOnDoubleClick={false}
@@ -506,6 +567,7 @@ function Flow({ canvas, initialFocus }: Props) {
           onOpenCanvas={(id, card) => navigate(`/c/${id}${card ? `?focus=${card}` : ""}`)} />
       )}
       {shortcuts && <Shortcuts onClose={() => setShortcuts(false)} />}
+      {mermaidDraft && <MermaidDialog initial={mermaidDraft} onClose={() => setMermaidDraft(null)} onSubmit={(draft) => void drawMermaid({ ...draft, ...(mermaidDraft.near ? { near: mermaidDraft.near } : {}) })} />}
       </LinkContext.Provider>
     </ZoomLevelContext.Provider>
   );

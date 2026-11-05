@@ -100,6 +100,11 @@ public sealed class LayoutEngine(CanvasState state)
         var card = state.Cards[cardId];
         var regionId = card.RegionId ?? throw new InvalidOperationException("Only cards in a region are placed automatically.");
         var region = state.Regions[regionId];
+        if (RegionLayouts.IsDiagram(region.Layout))
+        {
+            state.Cards[cardId] = card with { X = Geometry.Padding, Y = Geometry.Header, Placement = Placements.Auto };
+            return;
+        }
         var (col, y) = BestColumn(region, cardId, card.H);
         var contentWidth = Geometry.ContentWidth(region.Cols);
         if (region.Cols < Geometry.MaxCols && y + card.H - Geometry.Header > Geometry.TallnessLimit * contentWidth && CanWiden(region))
@@ -122,7 +127,9 @@ public sealed class LayoutEngine(CanvasState state)
         var container = region.ParentId ?? CanvasContainer;
         var items = Children(container).Where(box => box.Id != regionId).ToList();
         int x, y;
-        if (region.ParentId is { } parentId)
+        if (region.ParentId is { } diagramId && RegionLayouts.IsDiagram(state.Regions[diagramId].Layout))
+            (x, y) = (Geometry.Padding, Geometry.Header);
+        else if (region.ParentId is { } parentId)
         {
             var parent = state.Regions[parentId];
             (x, y) = Skyline(items, region.W, region.H, Geometry.Padding, Geometry.Header,
@@ -198,8 +205,16 @@ public sealed class LayoutEngine(CanvasState state)
         return !Children(container).Any(box => box.Id != region.Id && Overlaps(strip, box, gap));
     }
 
+    /// <summary>Refit a region to its contents now (the diagram pass needs a sub-region's size before placing its parent).</summary>
+    public void Refit(string regionId)
+    {
+        if (FitRegion(regionId)) Touch(regionId);
+    }
+
     private void ResolveOverlaps(string container, HashSet<string> touched)
     {
+        // Inside a diagram the diagram layout owns positions; pushing items apart there would undo it.
+        if (container != CanvasContainer && state.Regions.TryGetValue(container, out var owner) && RegionLayouts.IsDiagram(owner.Layout)) return;
         var gap = container == CanvasContainer ? Geometry.RegionGap : Geometry.Gap;
         var queue = new Queue<string>(touched.Order(StringComparer.Ordinal));
         var guard = 0;

@@ -187,11 +187,11 @@ public sealed partial class CanvasStore(Database database)
     private static async Task<List<Connection>> ConnectionsOf(SqliteConnection connection, string id, CancellationToken cancellationToken)
     {
         await using var command = connection.Command(null,
-            "SELECT id, source_id, target_id, kind, label, created_by, created_at FROM connections WHERE source_id = $id OR target_id = $id ORDER BY created_at, id", ("$id", id));
+            "SELECT id, source_id, target_id, kind, label, created_by, created_at, line, ends FROM connections WHERE source_id = $id OR target_id = $id ORDER BY created_at, id", ("$id", id));
         var list = new List<Connection>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            list.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.NullableString(4), reader.GetString(5), reader.Time(6)));
+            list.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.NullableString(4), reader.GetString(5), reader.Time(6), reader.NullableString(7), reader.NullableString(8)));
         return list;
     }
 

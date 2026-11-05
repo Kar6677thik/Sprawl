@@ -52,6 +52,17 @@ public static class CanvasEndpoints
             return Http.WithVersion(context, row.Version, insights with { DanglingLinks = [.. insights.DanglingLinks.Where(d => !reachable.Contains(d.Target))] });
         });
 
+        // A diagram region (or any region) as a Mermaid flowchart: what Claude reads back and edits as text.
+        api.MapGet("/canvases/{id}/regions/{regionId}/mermaid", async (string id, string regionId, CanvasStore store, HttpContext context, CancellationToken ct) =>
+        {
+            var (row, state) = await store.Current(id, ct);
+            var region = state.Regions.GetValueOrDefault(regionId)
+                ?? state.Regions.Values.Where(r => Text.SameTitle(r.Title, regionId)).OrderBy(r => r.ParentId is null ? 0 : 1).FirstOrDefault()
+                ?? throw SprawlException.NotFound($"Region {regionId} is not on canvas {id}.");
+            context.Response.Headers.ETag = Http.ETag(row.Version);
+            return Results.Text(Mermaid.Export(state, region), "text/plain; charset=utf-8");
+        });
+
         api.MapGet("/canvases/{id}/links/resolve", async (string id, string target, CrossLinks cross, CancellationToken ct) =>
             await cross.Resolve(id, target, ct) is { } found ? Results.Ok(found) : throw SprawlException.NotFound($"No card matches [[{target}]]."));
 

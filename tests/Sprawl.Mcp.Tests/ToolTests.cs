@@ -22,6 +22,9 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["get_card_context"] = (true, false, true, "canvas.read"),
             ["analyze_canvas"] = (true, false, true, "canvas.read"),
             ["get_due_questions"] = (true, false, true, "canvas.read"),
+            ["get_diagram"] = (true, false, true, "canvas.read"),
+            ["add_diagram"] = (false, false, false, "canvas.write"),
+            ["update_connections"] = (false, false, true, "canvas.write"),
             ["create_canvas"] = (false, false, false, "canvas.write"),
             ["add_to_canvas"] = (false, false, false, "canvas.write"),
             ["update_cards"] = (false, true, true, "canvas.write"),
@@ -56,7 +59,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["answer_questions", "expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region", "triage_inbox"], names);
+        Assert.Equal(["answer_questions", "expand_region", "find_gaps", "review_canvas", "seed_canvas", "synthesize_region", "triage_inbox", "visualize"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",
@@ -184,6 +187,68 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         Assert.DoesNotContain(ApiHost.DeviceToken, logs);
         Assert.DoesNotContain(Everyday, logs);
         Assert.DoesNotContain("eyJ", logs);
+    }
+
+    [Fact]
+    public async Task Claude_draws_reads_redraws_and_restyles_a_diagram()
+    {
+        var client = host.Client();
+        var created = Rpc.Data(await Rpc.Call(client, Everyday, "create_canvas", new
+        {
+            title = "Kafka internals",
+            regions = new object[] { new { title = "Concepts", @ref = "c" } },
+            cards = new object[] { new { region = "c", kind = "idea", title = "Partitions are the unit of order", @ref = "p" } }
+        }));
+        var canvasId = created.GetProperty("canvasId").GetString()!;
+
+        var drawn = Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new
+        {
+            canvasId,
+            title = "Produce path",
+            mermaid = "flowchart LR\n  prod((Producer)) --> broker{{Broker}}\n  broker ==>|append| log[(Partition log)]\n  broker -.->|ack| prod",
+            near = "Concepts"
+        }));
+        var broker = drawn.GetProperty("refs").GetProperty("d:broker").GetString()!;
+        Assert.StartsWith("cd_", broker);
+
+        // Shapes and the diagram show in the outline; the diagram reads back as Mermaid.
+        var outline = Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId }));
+        Assert.Contains("diagram, flows right", outline);
+        Assert.Contains("[hexagon] Broker", outline);
+        var mermaid = Rpc.Text(await Rpc.Call(client, Everyday, "get_diagram", new { canvasId, region = "Produce path" }));
+        Assert.StartsWith("flowchart LR", mermaid);
+        Assert.Contains("==>|\"append\"|", mermaid);
+
+        // A shape added piece by piece, and a connection from an explanatory card into the diagram.
+        var version = drawn.GetProperty("version").GetInt64();
+        var added = Rpc.Data(await Rpc.Call(client, Everyday, "add_to_canvas", new
+        {
+            canvasId,
+            cards = new object[] { new { region = "Produce path", kind = "note", title = "Follower", shape = "cylinder", @ref = "f" } },
+            connections = new object[]
+            {
+                new { from = broker, to = "f", label = "replicate", line = "dashed" },
+                new { from = created.GetProperty("refs").GetProperty("p").GetString()!, to = broker, kind = "example-of", ends = "none" }
+            },
+            expectedVersion = version
+        }));
+
+        // Restyle a connection, then redraw the whole diagram in place.
+        var full = Rpc.Data(await Rpc.Call(client, Everyday, "get_cards", new { cardIds = new[] { broker } }));
+        var link = full[0].GetProperty("connections").EnumerateArray().First(c => c.TryGetProperty("label", out var l) && l.GetString() == "replicate");
+        Rpc.Data(await Rpc.Call(client, Everyday, "update_connections", new
+        {
+            canvasId,
+            updates = new[] { new { connectionId = link.GetProperty("id").GetString()!, line = "thick", ends = "both" } }
+        }));
+        var redraw = await Rpc.Call(client, Everyday, "add_diagram", new { canvasId, title = "Produce path", mermaid = "flowchart TD\n  a[Producer] --> b[Broker]", replace = true });
+        Assert.Equal("invalid_request", redraw.GetProperty("structuredContent").GetProperty("error").GetProperty("code").GetString()); // replace needs expectedVersion
+        var current = Rpc.Data(await Rpc.Call(client, Everyday, "list_canvases", new { query = "Kafka" }))[0].GetProperty("version").GetInt64();
+        Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new { canvasId, title = "Produce path", mermaid = "flowchart TD\n  a[Producer] --> b[Broker]", replace = true, expectedVersion = current }));
+        var after = Rpc.Text(await Rpc.Call(client, Everyday, "get_diagram", new { canvasId, region = "Produce path" }));
+        Assert.StartsWith("flowchart TD", after);
+        Assert.DoesNotContain("Partition log", after);
+        Assert.True(added.GetProperty("changed").GetBoolean());
     }
 
     [Fact]

@@ -77,6 +77,8 @@ public static class OutlineRenderer
                 {
                     output.Append(c.SourceId).Append(" -").Append(c.Kind).Append("-> ").Append(c.TargetId);
                     if (c.Label is not null) output.Append(" \"").Append(c.Label).Append('"');
+                    if (c.Line is not null) output.Append(" [").Append(c.Line).Append(']');
+                    if (c.Ends is not null) output.Append(" [arrows: ").Append(c.Ends).Append(']');
                     output.Append("  ").Append(c.Id).Append('\n');
                 }
             }
@@ -90,7 +92,8 @@ public static class OutlineRenderer
             var sketches = state.Sketches.Values.Count(s => s.RegionId == region.Id);
             output.Append('\n').Append('#', level).Append(' ').Append(region.Title).Append("  ").Append(region.Id)
                 .Append("  (").Append(cards.Count).Append(cards.Count == 1 ? " card" : " cards")
-                .Append(sketches == 0 ? "" : sketches == 1 ? ", 1 sketch by the owner" : $", {sketches} sketches by the owner").Append(")\n");
+                .Append(sketches == 0 ? "" : sketches == 1 ? ", 1 sketch by the owner" : $", {sketches} sketches by the owner")
+                .Append(region.Layout switch { RegionLayouts.FlowDown => ", diagram, flows down", RegionLayouts.FlowRight => ", diagram, flows right", _ => "" }).Append(")\n");
             if (depth != OutlineDepths.Regions) WriteCards(cards, region.Id);
         }
 
@@ -101,7 +104,7 @@ public static class OutlineRenderer
                 if (emitted >= maxCards) { omitted[regionKey] = omitted.GetValueOrDefault(regionKey) + 1; continue; }
                 emitted++;
                 included.Add(card.Id);
-                output.Append("- ").Append(card.Id).Append(' ').Append(KindLabel(card.Kind)).Append(' ');
+                output.Append("- ").Append(card.Id).Append(' ').Append(card.Shape is null ? KindLabel(card.Kind) : $"[{card.Shape}]").Append(' ');
                 if (card.Emphasis == Emphases.Key) output.Append("★ ");
                 output.Append(card.Title);
                 if (card.Url is not null && depth != OutlineDepths.Full) output.Append(" <").Append(card.Url).Append('>');

@@ -173,6 +173,42 @@ public sealed class CanvasApiTests(SprawlFactory factory) : IClassFixture<Sprawl
     }
 
     [Fact]
+    public async Task Diagrams_from_mermaid_persist_with_shapes_layouts_and_styles_and_export_back()
+    {
+        var device = factory.Device();
+        var created = await NewCanvas(device, "Payments architecture");
+        var mermaid = """
+            flowchart LR
+              web[Web app] --> api{{API}}
+              api -.->|async| q@{ shape: h-cyl, label: Events }
+              api ==> db[(Ledger)]
+            """;
+        var result = await (await device.PostAsJsonAsync($"/api/v1/canvases/{created.CanvasId}/batches",
+            new BatchRequest([new AddDiagramIntent("Payments", mermaid, "p")]), Api.Json)).Read<BatchResult>();
+
+        var document = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}")).Read<CanvasDocument>();
+        var region = Assert.Single(document.Regions);
+        Assert.Equal(RegionLayouts.FlowRight, region.Layout);
+        Assert.Equal(Shapes.Hexagon, document.Cards.Single(c => c.Id == result.Refs["p:api"]).Shape);
+        Assert.Equal(Shapes.Cylinder, document.Cards.Single(c => c.Title == "Ledger").Shape);
+        var async = document.Connections.Single(c => c.Label == "async");
+        Assert.Equal(LineStyles.Dashed, async.Line);
+        Assert.Equal(LineStyles.Thick, document.Connections.Single(c => c.TargetId == result.Refs["p:db"]).Line);
+        Assert.True(document.Cards.Single(c => c.Title == "Ledger").X > document.Cards.Single(c => c.Title == "API").X);
+
+        var exported = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/regions/Payments/mermaid")).Content.ReadAsStringAsync();
+        Assert.StartsWith("flowchart LR\n", exported);
+        Assert.Contains("{{\"API\"}}", exported);
+        Assert.Contains("-.->|\"async\"|", exported);
+
+        // History replay and undo carry the new fields.
+        var past = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/state?version={result.Version}")).Read<CanvasDocument>();
+        Assert.Equal(LineStyles.Dashed, past.Connections.Single(c => c.Label == "async").Line);
+        var outline = await (await device.GetAsync($"/api/v1/canvases/{created.CanvasId}/outline")).Content.ReadAsStringAsync();
+        Assert.Contains("[hexagon] API", outline);
+    }
+
+    [Fact]
     public async Task A_stale_version_is_refused_with_412_and_the_current_version()
     {
         var device = factory.Device();

@@ -143,6 +143,7 @@ builder.Services.AddMcpServer(options =>
     .WithTools<WriteTools>()
     .WithTools<OrganizeTools>()
     .WithTools<AdminTools>()
+    .WithTools<DiagramTools>()
     .WithPrompts<CanvasPrompts>();
 
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1024 * 1024);
@@ -229,6 +230,11 @@ namespace Sprawl.Mcp
             - Never think in coordinates. The server lays everything out and never moves what the owner placed by hand.
             - A region titled "Inbox" holds the owner's quick captures, waiting to be sorted. get_due_questions lists the open questions the owner is
               reviewing: the ones they most want answered.
+            - Diagrams: a region can be a diagram (layout flow-down or flow-right). Its cards are shapes (rectangle, diamond, cylinder, person,
+              cloud, queue, …), its connections draw as arrows with labels and line styles, and the server lays it out as a layered flow. The
+              fastest way to draw one is add_diagram with a Mermaid flowchart; get_diagram returns any diagram as Mermaid, and add_diagram with
+              replace=true redraws it. Use diagrams for architectures, request and data flows, state machines, decision flowcharts and
+              processes, next to the cards that explain them, so a canvas holds both the ideas and the pictures of how they fit.
             - analyze_canvas finds gaps between regions, orphans and [[links]] with no card yet; get_card_context shows a card's backlinks and
               related cards. Use them to decide what to add or connect next.
             - Batch related additions into one add_to_canvas call, with refs for cross-references and a requestId so a retry is not applied twice.

@@ -50,6 +50,12 @@ export class SprawlClient {
 
   stateAt = (id: string, version: number) => this.json<CanvasDocument>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/state?version=${version}`);
 
+  mermaid = async (id: string, region: string) => {
+    const response = await this.fetcher(`/api/v1/canvases/${encodeURIComponent(id)}/regions/${encodeURIComponent(region)}/mermaid`, { credentials: "same-origin" });
+    if (!response.ok) throw toError(response.status, await response.text());
+    return response.text();
+  };
+
   insights = (id: string) => this.json<CanvasInsights>("GET", `/api/v1/canvases/${encodeURIComponent(id)}/insights`);
 
   cardContext = (id: string, cardId: string) =>

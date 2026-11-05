@@ -29,6 +29,7 @@ public sealed record CanvasMeta(
 }
 
 /// <summary>A region. Top-level coordinates are canvas-absolute; a sub-region's are relative to its parent.</summary>
+/// <param name="Layout">Null or <c>cards</c>: masonry; <c>flow-down</c> / <c>flow-right</c>: a diagram the server lays out as a layered flow.</param>
 public sealed record Region(
     string Id,
     string? ParentId,
@@ -42,7 +43,8 @@ public sealed record Region(
     string Placement,
     string CreatedBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt) : IEntity;
+    DateTimeOffset UpdatedAt,
+    string? Layout = null) : IEntity;
 
 /// <summary>A card. Coordinates are relative to its region, or canvas-absolute for a loose card (always manual).</summary>
 public sealed record Card(
@@ -65,7 +67,8 @@ public sealed record Card(
     string CreatedBy,
     string UpdatedBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt) : IEntity;
+    DateTimeOffset UpdatedAt,
+    string? Shape = null) : IEntity;
 
 /// <summary>
 /// A freehand stroke drawn by the owner: an SVG path (M/L/Q/C/Z commands) in its own box, which is relative to its region
@@ -92,4 +95,6 @@ public sealed record Connection(
     string Kind,
     string? Label,
     string CreatedBy,
-    DateTimeOffset CreatedAt) : IEntity;
+    DateTimeOffset CreatedAt,
+    string? Line = null,
+    string? Ends = null) : IEntity;

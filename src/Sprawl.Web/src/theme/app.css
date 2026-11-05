@@ -212,3 +212,49 @@ input::placeholder { color: var(--text-faint); }
 .sketch { display: block; overflow: visible; color: var(--text); opacity: 0.85; }
 .sketch[data-tint] { color: var(--tint); }
 .sketch.is-selected { filter: drop-shadow(0 0 2px var(--accent)); }
+
+/* ---- Diagrams --------------------------------------------------------------------------------------------- */
+.region.is-group { background: transparent; border: 1.5px dashed var(--border-strong); }
+.region.is-diagram { background: color-mix(in oklch, var(--region) 70%, transparent); }
+.region-flow { flex: none; color: var(--text-muted); }
+
+.shape-node { position: relative; width: 100%; height: 100%; display: grid; place-items: center; color: var(--text); }
+.shape-svg { position: absolute; inset: 0; overflow: visible; }
+.shape-svg > * { fill: var(--surface); stroke: var(--shape-stroke, var(--edge)); stroke-width: 1.5; stroke-linejoin: round; transition: stroke 120ms; }
+.shape-svg .shape-detail { fill: none; }
+.shape-node[data-tint] .shape-svg > :not(.shape-detail) { fill: color-mix(in oklch, var(--tint) 16%, var(--surface)); }
+.shape-node[data-tint] { --shape-stroke: var(--tint); }
+.shape-node:hover { --shape-stroke: var(--border-strong); }
+.shape-node[data-tint]:hover { --shape-stroke: var(--tint); }
+.shape-node.is-selected { --shape-stroke: var(--accent); }
+.shape-node.is-selected .shape-svg > * { stroke-width: 2; }
+.shape-node.is-key .shape-svg > * { stroke-width: 2.5; }
+.shape-node.is-fresh { animation: arrive 240ms ease-out; }
+.shape-label {
+  position: relative; max-width: calc(100% - 28px); text-align: center; font-size: 13px; font-weight: 550; line-height: 18px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none;
+}
+.shape-diamond .shape-label { max-width: 62%; font-size: 12.5px; }
+.shape-circle .shape-label { max-width: 76%; }
+.shape-parallelogram .shape-label, .shape-hexagon .shape-label { max-width: calc(100% - 44px); }
+.shape-cylinder .shape-label { margin-top: 10px; }
+.shape-document .shape-label { margin-top: -8px; }
+.shape-person { place-items: end center; }
+.shape-person .shape-label { margin-bottom: 2px; }
+.shape-text .shape-label { font-weight: 500; color: var(--text-muted); }
+
+/* Ports: drag from one to another node to connect. Shown on hover, as in draw.io. */
+.flow .react-flow__handle.port {
+  width: 9px; height: 9px; min-width: 0; min-height: 0; border-radius: 50%;
+  background: var(--surface); border: 1.5px solid var(--accent); opacity: 0; transition: opacity 120ms;
+}
+.flow .react-flow__node:hover .react-flow__handle.port, .flow .react-flow__node.selected .react-flow__handle.port,
+.flow .react-flow__handle.port.connectingfrom, .flow .react-flow__handle.port.connectingto { opacity: 1; }
+.flow .react-flow__connection-path { stroke: var(--accent); stroke-width: 1.5; }
+
+/* Line styles and diagram edges. */
+.flow .line-dashed .react-flow__edge-path { stroke-dasharray: 6 4; }
+.flow .line-dotted .react-flow__edge-path { stroke-dasharray: 1 4; stroke-linecap: round; stroke-width: 1.75; }
+.flow .line-thick .react-flow__edge-path { stroke-width: 2.75; }
+.flow .is-diagram .react-flow__edge-path { stroke: color-mix(in oklch, var(--edge) 70%, var(--text)); }
+.flow .is-diagram .react-flow__edge-text { fill: var(--text); font-size: 11.5px; }

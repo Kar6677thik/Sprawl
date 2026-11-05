@@ -93,6 +93,24 @@ public sealed class CanvasPrompts
             """;
     }
 
+    [McpServerPrompt(Name = "visualize", Title = "Explain a topic with diagrams")]
+    [Description("Build or extend a canvas that explains a topic with diagrams (architecture, flows, decisions) beside the cards that explain them.")]
+    public static string Visualize(
+        [Description("The topic or system to explain, e.g. \"how Kafka works\" or \"our checkout service\".")] string topic,
+        [Description("Optional: an existing canvas id (cv_…) or title to add to.")] string? canvas = null) =>
+        $"""
+        Explain "{topic}" visually on a Sprawl canvas{(string.IsNullOrWhiteSpace(canvas) ? "" : " (" + canvas + ")")}.
+        1. Find or create the canvas (list_canvases, then create_canvas with a few regions of explanatory cards if there is none). Read it with get_canvas.
+        2. Decide which pictures make the topic click, usually 2-5 of: the architecture (components and how they talk: flowchart LR, people as person,
+           external systems as cloud, stores as cylinder, queues and streams as queue, groups as subgraphs), the main request or data flow step by step
+           (flowchart TD), the key decision or state logic (diamonds for decisions, labelled yes/no edges), and the lifecycle of the central object.
+        3. Draw each with add_diagram, near the region of cards it illustrates. Use thick edges for the main path, dashed for async or optional ones,
+           and short edge labels that say what moves (requests, events, rows).
+        4. Connect the cards that explain a component to its shape (the refs add_diagram returns name each node) so the canvas reads both ways.
+        5. Add question cards for what the diagrams leave open. Finish with one line per diagram: what it shows.
+        Read a diagram with get_diagram before changing it; redraw it with add_diagram replace=true, passing expectedVersion.
+        """;
+
     [McpServerPrompt(Name = "synthesize_region", Title = "Synthesize a region")]
     [Description("Distil a region into one key summary card, linked to the cards it draws on.")]
     public static string SynthesizeRegion(

@@ -38,6 +38,7 @@ public sealed partial class BatchEngine
     private int index;
 
     private int maxIntents = Limits.IntentsPerBatch;
+    private long sequence;
 
     private BatchEngine(CanvasState original, BatchRequest request, Actor actor, DateTimeOffset now, IIdGenerator ids)
     {
@@ -89,6 +90,11 @@ public sealed partial class BatchEngine
         }
         if (state.Cards.Count > Limits.CardsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.CardsPerCanvas} cards.");
         if (state.Regions.Count > Limits.RegionsPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.RegionsPerCanvas} regions.");
+        if (state.Regions.Values.Any(r => RegionLayouts.IsDiagram(r.Layout)))
+        {
+            DiagramLayout.Apply(state, layout);
+            layout.Settle();
+        }
         // A sketch lives inside its region: when a merge or delete removes the region, its sketches go with it.
         foreach (var orphan in state.Sketches.Values.Where(s => s.RegionId is not null && !state.Regions.ContainsKey(s.RegionId)).ToList()) state.Sketches.Remove(orphan.Id);
         if (state.Sketches.Count > Limits.SketchesPerCanvas) throw SprawlException.Limit($"A canvas holds at most {Limits.SketchesPerCanvas} sketches.");
@@ -120,6 +126,8 @@ public sealed partial class BatchEngine
             case UnpinIntent unpin: Unpin(unpin); break;
             case AddSketchIntent add: AddSketch(add); break;
             case DeleteSketchesIntent delete: DeleteSketches(delete); break;
+            case UpdateConnectionIntent update: UpdateConnection(update); break;
+            case AddDiagramIntent diagram: AddDiagram(diagram); break;
             default: throw SprawlException.Invalid("Unknown intent.");
         }
     }
@@ -143,16 +151,16 @@ public sealed partial class BatchEngine
             return;
         }
         var anchor = add.Near is null ? null : (ResolveRegion(add.Near) ?? throw SprawlException.NotFound($"Region '{add.Near}' was not found."));
-        CreateRegion(title, add.Ref, parent?.Id, Text.Tint(add.Tint), anchor?.ParentId ?? anchor?.Id, LookaheadHeights(add.Ref, title, index + 1));
+        CreateRegion(title, add.Ref, parent?.Id, Text.Tint(add.Tint), anchor?.ParentId ?? anchor?.Id, LookaheadHeights(add.Ref, title, index + 1), Text.Layout(add.Layout));
     }
 
-    private Region CreateRegion(string title, string? reference, string? parentId, string? tint, string? anchorId, List<int> heights)
+    private Region CreateRegion(string title, string? reference, string? parentId, string? tint, string? anchorId, List<int> heights, string? regionLayout = null)
     {
         if (reference is not null) ValidateRef(reference);
-        var cols = Geometry.ColsFor(heights.Count);
-        var (width, height) = Geometry.EstimateRegion(cols, heights);
+        var cols = RegionLayouts.IsDiagram(regionLayout) ? 1 : Geometry.ColsFor(heights.Count);
+        var (width, height) = Geometry.EstimateRegion(cols, RegionLayouts.IsDiagram(regionLayout) ? [] : heights);
         var id = NewId(EntityKind.Region);
-        state.Regions[id] = new Region(id, parentId, title, tint, cols, 0, 0, width, height, Placements.Auto, actor.Author, now, now);
+        state.Regions[id] = new Region(id, parentId, title, tint, cols, 0, 0, width, height, Placements.Auto, actor.Author, now, now, regionLayout);
         layout.PlaceRegion(id, parentId is null ? anchorId ?? LookaheadAnchor(reference, title) : null);
         layout.Touch(id);
         MapRef(reference, id);
@@ -216,7 +224,22 @@ public sealed partial class BatchEngine
             updated = updated with { Title = title };
         }
         if (update.Tint is not null) updated = updated with { Tint = Text.Tint(update.Tint) };
-        if (updated != region) state.Regions[region.Id] = updated with { UpdatedAt = now };
+        if (update.Layout is not null) updated = updated with { Layout = Text.Layout(update.Layout) };
+        if (updated == region) return;
+        state.Regions[region.Id] = updated with { UpdatedAt = now };
+        if (updated.Layout == region.Layout) return;
+        // A new layout re-sizes the region's cards for it and hands them back to automatic placement.
+        if (!RegionLayouts.IsDiagram(updated.Layout)) state.Regions[region.Id] = state.Regions[region.Id] with { Cols = Geometry.ColsFor(state.CardsIn(region.Id).Count()) };
+        var cards = state.CardsIn(region.Id).OrderBy(c => c.CreatedAt).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
+        // Park them all clear of every column first, so cards still at their old spots do not block the first ones placed.
+        foreach (var card in cards) state.Cards[card.Id] = card with { X = -100_000, Y = Geometry.Header };
+        foreach (var card in cards.Select(c => state.Cards[c.Id]))
+        {
+            layout.Touch(card.Id);
+            state.Cards[card.Id] = Sized(card with { Placement = Placements.Auto });
+            layout.PlaceCard(card.Id);
+            layout.Touch(card.Id);
+        }
     }
 
     private void NestRegion(NestRegionIntent nest)
@@ -283,7 +306,9 @@ public sealed partial class BatchEngine
 
     // ---- Cards ---------------------------------------------------------------------------------------------------
 
-    private void AddCard(AddCardIntent add)
+    private void AddCard(AddCardIntent add) => AddCard(add, diagramNode: false);
+
+    private void AddCard(AddCardIntent add, bool diagramNode)
     {
         if (add.At is not null && !actor.IsOwner) throw SprawlException.Forbidden("Only the owner places cards by position.");
         if (add.Ref is not null) ValidateRef(add.Ref);
@@ -304,7 +329,7 @@ public sealed partial class BatchEngine
         }
         else if (add.At is null) throw SprawlException.Invalid("A card needs a region.");
 
-        if (request.OnDuplicate != DuplicatePolicies.Add && state.CardsIn(region?.Id).FirstOrDefault(card => Text.SameTitle(card.Title, title)) is { } duplicate)
+        if (!diagramNode && request.OnDuplicate != DuplicatePolicies.Add && state.CardsIn(region?.Id).FirstOrDefault(card => Text.SameTitle(card.Title, title)) is { } duplicate)
         {
             if (request.OnDuplicate == DuplicatePolicies.Fail)
                 throw new SprawlException(ErrorCodes.Duplicate, $"A card titled '{duplicate.Title}' already exists in this region ({duplicate.Id}).", 409) { Entities = [duplicate.Id] };
@@ -315,8 +340,8 @@ public sealed partial class BatchEngine
 
         var size = Geometry.SizeFor(kind, body);
         var id = NewId(EntityKind.Card);
-        var card = new Card(id, region?.Id, kind, title, body, url, language, Text.Tint(add.Tint), Text.Emphasis(add.Emphasis), size,
-            0, 0, Geometry.CardWidth, Geometry.HeightOf(size), Placements.Auto, Placements.Auto, actor.Author, actor.Author, now, now);
+        var card = Sized(new Card(id, region?.Id, kind, title, body, url, language, Text.Tint(add.Tint), Text.Emphasis(add.Emphasis), size,
+            0, 0, Geometry.CardWidth, Geometry.HeightOf(size), Placements.Auto, Placements.Auto, actor.Author, actor.Author, now, now, Text.Shape(add.Shape)));
         if (add.At is { } at)
         {
             var (x, y) = Clamp(at.X, at.Y, region is not null);
@@ -331,7 +356,7 @@ public sealed partial class BatchEngine
         MapRef(add.Ref, id);
         // Duplicates are skipped only within a region; elsewhere on the canvas the same title is allowed but flagged,
         // so a caller that read a single region learns about it (and can merge with reorganize/mergeCards).
-        if (state.Cards.Values.FirstOrDefault(other => other.Id != id && other.RegionId != region?.Id && Text.SameTitle(other.Title, title)) is { } twin)
+        if (!diagramNode && state.Cards.Values.FirstOrDefault(other => other.Id != id && other.RegionId != region?.Id && Text.SameTitle(other.Title, title)) is { } twin)
         {
             var where = twin.RegionId is { } twinRegion && state.Regions.TryGetValue(twinRegion, out var r) ? $"region '{r.Title}'" : "the open canvas";
             notes.Add($"'{title}' ({id}) has the same title as {twin.Id} in {where}; if they are the same idea, merge them with reorganize mergeCards.");
@@ -352,7 +377,8 @@ public sealed partial class BatchEngine
             Url = update.Url is null ? (kind == CardKinds.Link ? Text.Url(card.Url, kind) : card.Url) : Text.Url(update.Url, kind),
             Language = update.Language is null ? card.Language : Text.Language(update.Language),
             Emphasis = update.Emphasis is null ? card.Emphasis : Text.Emphasis(update.Emphasis),
-            Tint = update.Tint is null ? card.Tint : Text.Tint(update.Tint)
+            Tint = update.Tint is null ? card.Tint : Text.Tint(update.Tint),
+            Shape = update.Shape is null ? card.Shape : Text.Shape(update.Shape)
         };
         if (updated == card) return;
         Resize(card, updated with { UpdatedAt = now, UpdatedBy = actor.Author });
@@ -360,13 +386,9 @@ public sealed partial class BatchEngine
 
     private void Resize(Card before, Card updated)
     {
-        if (updated.SizeSource == Placements.Auto)
-        {
-            var size = Geometry.SizeFor(updated.Kind, updated.Body);
-            updated = updated with { Size = size, H = Geometry.HeightOf(size) };
-        }
+        updated = Sized(updated);
         state.Cards[before.Id] = updated;
-        if (updated.H != before.H) layout.Touch(before.Id);
+        if (updated.H != before.H || updated.W != before.W) layout.Touch(before.Id);
     }
 
     private void MoveCards(MoveCardsIntent move)
@@ -391,7 +413,7 @@ public sealed partial class BatchEngine
             throw SprawlException.Pinned($"Card '{card.Title}' was placed by hand and cannot be moved.", [card.Id]);
         }
         layout.Touch(card.Id);
-        state.Cards[card.Id] = card with { RegionId = regionId, Placement = Placements.Auto };
+        state.Cards[card.Id] = Sized(card with { RegionId = regionId, Placement = Placements.Auto });
         layout.PlaceCard(card.Id);
         layout.Touch(card.Id);
     }
@@ -441,14 +463,130 @@ public sealed partial class BatchEngine
         if (from == to) throw SprawlException.Invalid("A connection needs two different endpoints.");
         var kind = connect.Kind is null ? ConnectionKinds.Relates : Text.OneOf(connect.Kind, ConnectionKinds.All, "connection kind");
         var label = Text.Label(connect.Label);
+        var line = Text.Line(connect.Line);
+        var ends = Text.Ends(connect.Ends);
         var existing = state.Connections.Values.FirstOrDefault(c => c.SourceId == from && c.TargetId == to && c.Kind == kind);
         if (existing is not null)
         {
-            if (connect.Label is not null && existing.Label != label) state.Connections[existing.Id] = existing with { Label = label };
+            var restyled = existing with
+            {
+                Label = connect.Label is null ? existing.Label : label,
+                Line = connect.Line is null ? existing.Line : line,
+                Ends = connect.Ends is null ? existing.Ends : ends
+            };
+            if (restyled != existing) state.Connections[existing.Id] = restyled;
             return;
         }
         var id = NewId(EntityKind.Connection);
-        state.Connections[id] = new Connection(id, from, to, kind, label, actor.Author, now);
+        state.Connections[id] = new Connection(id, from, to, kind, label, actor.Author, now, line, ends);
+    }
+
+    private void UpdateConnection(UpdateConnectionIntent update)
+    {
+        var connection = state.Connections.GetValueOrDefault(update.Id) ?? throw SprawlException.NotFound($"Connection '{update.Id}' was not found.");
+        var updated = connection with
+        {
+            Kind = update.Kind is null ? connection.Kind : Text.OneOf(update.Kind, ConnectionKinds.All, "connection kind"),
+            Label = update.Label is null ? connection.Label : Text.Label(update.Label.Length == 0 ? null : update.Label),
+            Line = update.Line is null ? connection.Line : Text.Line(update.Line),
+            Ends = update.Ends is null ? connection.Ends : Text.Ends(update.Ends)
+        };
+        if (updated != connection) state.Connections[connection.Id] = updated;
+    }
+
+    /// <summary>
+    /// A Mermaid flowchart as a diagram region: one sub-region per subgraph (when the diagram is top-level, since regions
+    /// nest one level), one shaped card per node (titles may repeat, as "Yes" and "No" do), one connection per edge.
+    /// Node refs are <c>{ref}:{nodeId}</c>; the diagram pass at the end of the batch lays it all out.
+    /// </summary>
+    private void AddDiagram(AddDiagramIntent add)
+    {
+        var chart = Mermaid.Parse(add.Mermaid);
+        var flow = add.Layout is null ? chart.Layout : Text.Layout(add.Layout);
+        if (!RegionLayouts.IsDiagram(flow)) flow = chart.Layout;
+        var prefix = add.Ref ?? $"diagram{index + 1}";
+        ValidateRef(prefix);
+        var existed = state.RegionsIn(add.Parent is null ? null : ResolveRegion(add.Parent)?.Id).FirstOrDefault(r => Text.SameTitle(r.Title, add.Title));
+        if (existed is not null && add.Replace)
+        {
+            var oldGroups = state.RegionsIn(existed.Id).Select(r => r.Id).ToList();
+            var cards = state.Cards.Values.Where(c => c.RegionId == existed.Id || (c.RegionId is not null && oldGroups.Contains(c.RegionId))).Select(c => c.Id).ToList();
+            if (!actor.IsOwner && state.Cards.Values.Any(c => cards.Contains(c.Id) && c.Placement == Placements.Manual))
+                throw SprawlException.Pinned($"Diagram '{existed.Title}' has shapes the owner placed by hand; edit it with update_cards and connect instead.", [existed.Id]);
+            DeleteCards(new DeleteCardsIntent(cards));
+            foreach (var group in oldGroups)
+            {
+                foreach (var c in state.Connections.Values.Where(c => c.SourceId == group || c.TargetId == group).ToList()) state.Connections.Remove(c.Id);
+                layout.Touch(group);
+                state.Regions.Remove(group);
+            }
+        }
+        AddRegion(new AddRegionIntent(add.Title, prefix, add.Parent, null, add.Near, flow));
+        var region = state.Regions[refs[prefix]];
+        // A card region becomes a diagram; a redraw also takes the new direction.
+        if (!RegionLayouts.IsDiagram(region.Layout) || (add.Replace && region.Layout != flow))
+        {
+            UpdateRegion(new UpdateRegionIntent(region.Id, Layout: flow));
+            region = state.Regions[region.Id];
+        }
+        var nested = region.ParentId is null;
+        if (!nested && chart.Subgraphs.Count > 0) notes.Add($"Diagram '{region.Title}' is a sub-region, so its subgraphs were flattened into it.");
+
+        string NodeRef(string nodeId) => prefix.Length + nodeId.Length + 1 <= Limits.Ref ? $"{prefix}:{nodeId}" : $"{prefix}:#{StableHash(nodeId)}";
+        string GroupRef(string groupId) => prefix.Length + groupId.Length + 2 <= Limits.Ref ? $"{prefix}/{groupId}" : $"{prefix}/#{StableHash(groupId)}";
+        if (nested)
+            foreach (var group in chart.Subgraphs)
+                AddRegion(new AddRegionIntent(Clip(group.Title, Limits.RegionTitle), GroupRef(group.Id), region.Id, null, null, group.Layout ?? flow));
+        foreach (var node in chart.Nodes)
+        {
+            var target = nested && node.Subgraph is not null ? GroupRef(node.Subgraph) : region.Id;
+            var title = Clip(node.Label, Limits.CardTitle);
+            AddCard(new AddCardIntent(CardKinds.Note, title, target, NodeRef(node.Id), title == node.Label ? null : node.Label, Shape: node.Shape), diagramNode: true);
+            // Everything in one batch shares a timestamp; a tick per node keeps the Mermaid order, which the layout and the outline read.
+            var created = state.Cards[refs[NodeRef(node.Id)]];
+            state.Cards[created.Id] = created with { CreatedAt = now.AddTicks(++sequence), UpdatedAt = now.AddTicks(sequence) };
+        }
+        var groups = chart.Subgraphs.Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
+        string EndRef(string id) => groups.Contains(id) ? (nested ? GroupRef(id) : region.Id) : NodeRef(id);
+        foreach (var edge in chart.Edges)
+        {
+            var (from, to) = (EndRef(edge.From), EndRef(edge.To));
+            if (refs.GetValueOrDefault(from) == refs.GetValueOrDefault(to)) continue;
+            var kind = edge.Ends == EndStyles.End ? ConnectionKinds.LeadsTo : ConnectionKinds.Relates;
+            var ends = edge.Ends is EndStyles.End or EndStyles.None ? null : edge.Ends;
+            var before = state.Connections.Keys.ToHashSet(StringComparer.Ordinal);
+            Connect(new ConnectIntent(from, to, kind, edge.Label is null ? null : Clip(edge.Label, Limits.Label), edge.Line == LineStyles.Solid ? null : edge.Line, ends));
+            foreach (var id in state.Connections.Keys.Where(id => !before.Contains(id)).ToList())
+                state.Connections[id] = state.Connections[id] with { CreatedAt = now.AddTicks(++sequence) };
+        }
+    }
+
+    /// <summary>FNV-1a, so a long node id maps to the same short ref in every process (string.GetHashCode is randomised).</summary>
+    private static uint StableHash(string text)
+    {
+        var hash = 2166136261u;
+        foreach (var c in text) hash = (hash ^ c) * 16777619u;
+        return hash;
+    }
+
+    private static string Clip(string text, int max) => text.Length <= max ? text : text[..(max - 1)].TrimEnd() + "…";
+
+    /// <summary>
+    /// A card's box for where it is. Shapes take the size of their label inside a diagram and the column width elsewhere;
+    /// plain cards keep their height class. A size the owner set by hand is kept.
+    /// </summary>
+    private Card Sized(Card card)
+    {
+        if (card.SizeSource == Placements.Manual) return card;
+        var inDiagram = card.RegionId is { } r && state.Regions.TryGetValue(r, out var region) && RegionLayouts.IsDiagram(region.Layout);
+        if (card.Shape is { } shape)
+        {
+            var (w, h) = ShapeGeometry.Size(shape, card.Title);
+            return inDiagram ? card with { Size = CardSizes.Compact, W = w, H = h }
+                : card with { Size = CardSizes.Compact, W = Geometry.CardWidth, H = Math.Max(Geometry.CompactHeight, h) };
+        }
+        var size = Geometry.SizeFor(card.Kind, card.Body);
+        return card with { Size = size, W = Geometry.CardWidth, H = Geometry.HeightOf(size) };
     }
 
     private void Disconnect(DisconnectIntent disconnect)
@@ -609,8 +747,7 @@ public sealed partial class BatchEngine
             var card = RequireCard(id);
             if (card.RegionId is null) throw SprawlException.Invalid("A loose card has no region to be placed in; drag it into one.");
             layout.Touch(card.Id);
-            var size = Geometry.SizeFor(card.Kind, card.Body);
-            state.Cards[card.Id] = card with { Placement = Placements.Auto, SizeSource = Placements.Auto, Size = size, W = Geometry.CardWidth, H = Geometry.HeightOf(size) };
+            state.Cards[card.Id] = Sized(card with { Placement = Placements.Auto, SizeSource = Placements.Auto });
             layout.PlaceCard(card.Id);
             layout.Touch(card.Id);
         }
@@ -732,6 +869,10 @@ public static partial class Text
     }
 
     public static string Kind(string value) => OneOf(value, CardKinds.All, "card kind");
+    public static string? Shape(string? value) => value is null || value.Trim().ToLowerInvariant() == Shapes.None ? null : OneOf(value, Shapes.All, "shape");
+    public static string? Layout(string? value) => value is null ? null : OneOf(value, RegionLayouts.All, "layout") is var l && l == RegionLayouts.Cards ? null : l;
+    public static string? Line(string? value) => value is null ? null : OneOf(value, LineStyles.All, "line style") is var l && l == LineStyles.Solid ? null : l;
+    public static string? Ends(string? value) => value is null ? null : OneOf(value, EndStyles.All, "ends");
     public static string Emphasis(string? value) => value is null ? Emphases.Normal : OneOf(value, Emphases.All, "emphasis");
     public static string? Tint(string? value) => value is null || value == Tints.None ? null : OneOf(value, Tints.All, "tint");
 

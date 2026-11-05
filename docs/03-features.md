@@ -1,6 +1,6 @@
 # Sprawl feature plan: the best of comparable tools
 
-Written 5 November 2026. **Status: P1–P5 built.** This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
+Written 5 November 2026. **Status: P1–P6 built.** P6 (diagrams) is in [§3](#3-p6-diagrams-drawio-style-built). This plan surveys tools that do part of what Sprawl does, keeps the ideas that suit a canvas that Claude mostly writes, and ranks them. Fixed decisions in [01-design.md](01-design.md) still hold: one owner, the MCP never sees geometry, and every change is a batch in the op log.
 
 ## 1. What the others do best
 
@@ -69,3 +69,26 @@ Left out on purpose: real-time multi-user collaboration (single owner), an in-ap
   - Paths are limited to M, L, Q, C and Z commands and numbers (`Text.SketchPath`), so stored ink cannot script or link. At most 1,000 sketches per canvas, 20,000 characters per path.
   - Claude cannot draw (`addSketch` and `deleteSketches` are refused to the device token) and sees only a count per region in the outline ("2 sketches by the owner"). Exports leave sketches out.
   - Strokes are smoothed into quadratic curves through midpoints, after dropping points closer than 2 canvas pixels (`canvas/ink.ts`).
+
+## 3. P6: Diagrams, draw.io style (built)
+
+The owner asked for draw.io-like shapes and connections that Claude (or any MCP client) can use to build architectures, flows and flowcharts on an infinite canvas. Options checked on 5 November 2026:
+
+| Option | Licence | Verdict |
+|---|---|---|
+| [draw.io](https://github.com/jgraph/drawio) | Modified Apache 2.0; its own README says it is not open source | No: a whole app on an older non-React engine |
+| [maxGraph](https://github.com/maxGraph/maxGraph) (mxGraph's TypeScript successor) | Apache 2.0 | Capable, but a vanilla DOM engine: it would replace the React canvas, a rewrite for no gain |
+| [tldraw](https://tldraw.dev/sdk-features/license-key) | Needs a licence key in production | No |
+| [Excalidraw](https://npmjs.com/package/@excalidraw/excalidraw) | MIT, React | A freehand whiteboard: absolute coordinates, exactly what Claude is bad at |
+| React Flow (already the canvas) + server layout | MIT | **Chosen.** The usual base for draw.io-like React editors, and Sprawl's model already keeps Claude out of coordinates |
+
+So diagrams are built on the existing stack, without a new dependency:
+
+- **Shapes.** A card may carry a `shape`: rectangle, rounded, terminal, diamond, circle, ellipse, cylinder, queue, parallelogram, hexagon, document, subroutine, cloud, person or text, drawn in SVG (`canvas/shapes.tsx`). In a diagram a shape is sized to its label (`ShapeGeometry`); in a card region it keeps the column width.
+- **Diagram regions.** A region's `layout` may be `flow-down` or `flow-right`. The server lays such a region out as a layered flow in C# (`Sprawl.Domain/DiagramLayout.cs`, a compact Sugiyama layout): cycles broken from the sources, longest-path ranks tightened, dummy nodes on long edges, barycenter sweeps keeping the order with the fewest crossings, nodes centred on their neighbours. Sub-regions are groups, laid out first and then placed as one box. It is deterministic and runs at the end of every batch, so Claude's additions and the owner's edits both land laid out. Shapes placed by hand stay put.
+- **Connections** carry a `line` (solid, dashed, dotted, thick) and `ends` (end, start, both, none; by default the kind decides). Inside diagrams they run orthogonally with rounded corners and show their labels at reading zoom. `updateConnection` restyles one in place.
+- **Mermaid in and out.** `addDiagram` takes a Mermaid flowchart (`Sprawl.Domain/Mermaid.cs`): every node shape including `@{ shape: … }`, chains, `&`, every arrow form and label form, and subgraphs with their own direction. `GET /api/v1/canvases/{id}/regions/{region}/mermaid` exports any region back. With `replace`, a diagram is redrawn in place, so the edit loop for Claude is read as Mermaid, edit, send back.
+- **MCP:** `add_diagram`, `get_diagram` and `update_connections`; `shape`, `layout`, `line` and `ends` on the existing tools; `setLayout` in `reorganize`; a `visualize` prompt that builds a topic's architecture, flows and decision charts beside the cards that explain them.
+- **UI:** a shape picker in the card panel; ports on hover to drag-connect nodes, as in draw.io; quick-add (N) inside a diagram makes a shape; `M` opens a Mermaid sheet (new diagram, or edit the selected one as text); palette commands to turn a region into a diagram (flows down or right) and back, and to copy any region as Mermaid; line style, arrowheads and label editing per connection.
+- **Storage:** migration `0004_diagrams.sql` adds `regions.layout`, `cards.shape`, `connections.line` and `connections.ends`. Older op-log rows and snapshots read with the new fields unset.
+- **Not built yet:** free-form resizing of shapes, manual waypoints on connectors, swimlanes, and sequence or class diagrams (Mermaid flowcharts only).

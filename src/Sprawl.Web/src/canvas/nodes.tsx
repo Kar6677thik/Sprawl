@@ -3,8 +3,24 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { CardNode, RegionNode, SketchNode } from "./flow";
 import type { ZoomLevel } from "./zoom";
 import { Body, KindGlyph } from "./parts";
+import { shapeOutline } from "./shapes";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
+
+/**
+ * Diagram nodes get a port on each side, shown on hover: drag from one to another node to connect them, as in draw.io.
+ * (Edges themselves float to the facing sides, so the port only starts the drag.)
+ */
+function Ports() {
+  return (
+    <>
+      <Handle id="t" type="source" position={Position.Top} className="port" />
+      <Handle id="r" type="source" position={Position.Right} className="port" />
+      <Handle id="b" type="source" position={Position.Bottom} className="port" />
+      <Handle id="l" type="source" position={Position.Left} className="port" />
+    </>
+  );
+}
 
 /** Connections attach to invisible handles; the canvas never shows connection dots. */
 function Anchors() {
@@ -32,10 +48,18 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
         </div>
       </div>
     );
+  const diagram = region.layout === "flow-down" || region.layout === "flow-right";
   return (
-    <div className={`region${region.parentId ? " is-sub" : ""}${selected ? " is-selected" : ""}`} data-tint={region.tint ?? undefined}>
+    <div className={`region${region.parentId ? " is-sub" : ""}${diagram ? " is-diagram" : ""}${data.group ? " is-group" : ""}${selected ? " is-selected" : ""}`}
+      data-tint={region.tint ?? undefined}>
       <Anchors />
+      {data.group && <Ports />}
       <header className="region-header">
+        {diagram && (
+          <svg className="region-flow" viewBox="0 0 12 12" width="12" height="12" aria-label={region.layout === "flow-right" ? "Diagram, flows right" : "Diagram, flows down"}>
+            <path d={region.layout === "flow-right" ? "M1.5 6h8M7 3.5 9.5 6 7 8.5" : "M6 1.5v8M3.5 7 6 9.5 8.5 7"} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
         <span className="region-title">{region.title}</span>
         {level !== "near" && <span className="region-count">{cardCount}</span>}
         {region.placement === "manual" && level !== "far" && <span className="pin" title="Placed by hand" aria-label="Placed by hand" />}
@@ -45,8 +69,24 @@ export const RegionView = memo(function RegionView({ data, selected }: NodeProps
 });
 
 export const CardView = memo(function CardView({ data, selected }: NodeProps<CardNode>) {
-  const { card, fresh } = data;
+  const { card, fresh, diagram } = data;
   const level = useContext(ZoomLevelContext);
+  if (card.shape && level !== "far") {
+    const classes = ["shape-node", `shape-${card.shape}`];
+    if (selected) classes.push("is-selected");
+    if (fresh) classes.push("is-fresh");
+    if (card.emphasis === "key") classes.push("is-key");
+    return (
+      <div className={classes.join(" ")} data-tint={card.tint ?? undefined} aria-label={card.title} title={card.body || undefined}>
+        <Anchors />
+        <Ports />
+        <svg className="shape-svg" width={card.w} height={card.h} viewBox={`0 0 ${card.w} ${card.h}`} aria-hidden="true">
+          {shapeOutline(card.shape, card.w, card.h, 1.5)}
+        </svg>
+        <span className="shape-label">{card.title}</span>
+      </div>
+    );
+  }
   const classes = ["card", `kind-${card.kind}`];
   if (card.emphasis === "key") classes.push("is-key");
   if (selected) classes.push("is-selected");
@@ -55,6 +95,7 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
   return (
     <article className={classes.join(" ")} data-tint={card.tint ?? undefined} aria-label={card.title}>
       <Anchors />
+      {diagram && <Ports />}
       {card.createdBy === "ai" && <span className="ai-mark" title="Added by Claude" aria-label="Added by Claude" />}
       {level !== "far" && (
         <>

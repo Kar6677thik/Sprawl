@@ -34,6 +34,57 @@ public static class Emphases
     public static readonly string[] All = [Normal, Key];
 }
 
+/// <summary>Diagram shapes, as in draw.io and Mermaid. A card with a shape draws as that shape; without one it is a card.</summary>
+public static class Shapes
+{
+    public const string None = "none";
+    public const string Rectangle = "rectangle";   // a process step, a component
+    public const string Rounded = "rounded";       // a step, a service
+    public const string Terminal = "terminal";     // start / end (stadium)
+    public const string Diamond = "diamond";       // a decision
+    public const string Ellipse = "ellipse";
+    public const string Circle = "circle";         // an event, a junction
+    public const string Cylinder = "cylinder";     // a database, a store
+    public const string Parallelogram = "parallelogram"; // input / output
+    public const string Hexagon = "hexagon";       // preparation, a condition
+    public const string Document = "document";
+    public const string Cloud = "cloud";           // an external system, the internet
+    public const string Person = "person";         // an actor, a user
+    public const string Queue = "queue";           // a queue, a stream, a topic
+    public const string Subroutine = "subroutine"; // a predefined process
+    public const string Text = "text";             // a bare label
+    public static readonly string[] All = [Rectangle, Rounded, Terminal, Diamond, Ellipse, Circle, Cylinder, Parallelogram, Hexagon, Document, Cloud, Person, Queue, Subroutine, Text];
+}
+
+/// <summary>How a region arranges its contents: cards in masonry columns, or a diagram laid out as a layered flow.</summary>
+public static class RegionLayouts
+{
+    public const string Cards = "cards";
+    public const string FlowDown = "flow-down";
+    public const string FlowRight = "flow-right";
+    public static readonly string[] All = [Cards, FlowDown, FlowRight];
+    public static bool IsDiagram(string? layout) => layout is FlowDown or FlowRight;
+}
+
+public static class LineStyles
+{
+    public const string Solid = "solid";
+    public const string Dashed = "dashed";
+    public const string Dotted = "dotted";
+    public const string Thick = "thick";
+    public static readonly string[] All = [Solid, Dashed, Dotted, Thick];
+}
+
+/// <summary>Where a connection draws arrowheads. Unset, the kind decides (directional kinds get one at the target).</summary>
+public static class EndStyles
+{
+    public const string None = "none";
+    public const string End = "end";
+    public const string Start = "start";
+    public const string Both = "both";
+    public static readonly string[] All = [None, End, Start, Both];
+}
+
 public static class Placements
 {
     /// <summary>The server places the item and may translate it to make room.</summary>
@@ -119,4 +170,6 @@ public static class Limits
     public const int SketchPath = 20000;
     public const int SketchesPerCanvas = 1000;
     public const int SketchSize = 20000;
+    public const int Mermaid = 20000;
+    public const int DiagramNodes = 300;
 }

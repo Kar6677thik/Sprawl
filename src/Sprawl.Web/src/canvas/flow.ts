@@ -1,12 +1,12 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import type { Card, CanvasDocument, Connection, Region, Sketch } from "../api/types";
+import { isDiagram, type Card, type CanvasDocument, type Connection, type Region, type Sketch } from "../api/types";
 import { orderRegions } from "./document";
 import type { ZoomLevel } from "./zoom";
 
 /** A descendant's rectangle relative to its top-level region, drawn as the zoomed-out miniature. */
 export type MiniBox = { id: string; x: number; y: number; w: number; h: number; kind: "card" | "region" };
-export type RegionNodeData = { region: Region; cardCount: number; minis: MiniBox[] };
-export type CardNodeData = { card: Card; fresh: boolean };
+export type RegionNodeData = { region: Region; cardCount: number; minis: MiniBox[]; group: boolean };
+export type CardNodeData = { card: Card; fresh: boolean; diagram: boolean };
 export type RegionNode = Node<RegionNodeData, "region">;
 export type CardNode = Node<CardNodeData, "card">;
 export type SketchNode = Node<{ sketch: Sketch }, "sketch">;
@@ -25,6 +25,7 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
   const minis = miniatures(doc);
   const counts = new Map<string, number>();
   for (const card of doc.cards) if (card.regionId) counts.set(card.regionId, (counts.get(card.regionId) ?? 0) + 1);
+  const byId = new Map(doc.regions.map((r) => [r.id, r]));
   const regions: RegionNode[] = orderRegions(doc.regions).map((region) => ({
     id: region.id,
     type: "region",
@@ -32,7 +33,7 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
     width: region.w,
     height: region.h,
     ...(region.parentId ? { parentId: region.parentId } : {}),
-    data: { region, cardCount: counts.get(region.id) ?? 0, minis: minis.get(region.id) ?? [] },
+    data: { region, cardCount: counts.get(region.id) ?? 0, minis: minis.get(region.id) ?? [], group: region.parentId !== null && isDiagram(byId.get(region.parentId)?.layout) },
     className: region.placement === "manual" ? "is-manual" : undefined,
     zIndex: region.parentId ? 1 : 0,
     hidden: far && region.parentId !== null,
@@ -44,7 +45,7 @@ export function toNodes(doc: CanvasDocument, fresh: ReadonlySet<string> = new Se
     width: card.w,
     height: card.h,
     ...(card.regionId ? { parentId: card.regionId } : {}),
-    data: { card, fresh: fresh.has(card.id) },
+    data: { card, fresh: fresh.has(card.id), diagram: card.regionId !== null && isDiagram(byId.get(card.regionId)?.layout) },
     zIndex: 3,
     hidden: far && card.regionId !== null,
   }));
@@ -81,21 +82,46 @@ function miniatures(doc: CanvasDocument): Map<string, MiniBox[]> {
   return result;
 }
 
-export function toEdges(connections: Connection[], level: ZoomLevel): Edge[] {
-  return connections.map((connection) => ({
+/** Ids of everything inside a diagram (its cards, its groups and their cards): their connections are drawn as diagram edges. */
+export function diagramMembers(doc: Pick<CanvasDocument, "regions" | "cards">): Set<string> {
+  const byId = new Map(doc.regions.map((r) => [r.id, r]));
+  const inDiagram = (regionId: string | null): boolean => {
+    for (let id = regionId; id; id = byId.get(id)?.parentId ?? null) if (isDiagram(byId.get(id)?.layout)) return true;
+    return false;
+  };
+  const members = new Set<string>();
+  for (const region of doc.regions) if (region.parentId && inDiagram(region.parentId)) members.add(region.id);
+  for (const card of doc.cards) if (inDiagram(card.regionId)) members.add(card.id);
+  return members;
+}
+
+const ARROW = { type: MarkerType.ArrowClosed, width: 14, height: 14 } as const;
+
+/**
+ * Connections as edges. Arrowheads follow the connection's ends, or its kind when unset; the line style shows as a dash
+ * pattern or weight. Inside diagrams edges run orthogonally and show their labels at every reading zoom.
+ */
+export function toEdges(connections: Connection[], level: ZoomLevel, members: ReadonlySet<string> = new Set()): Edge[] {
+  return connections.map((connection) => {
+    const ends = connection.ends ?? (DIRECTIONAL.has(connection.kind) ? "end" : "none");
+    const orthogonal = members.has(connection.sourceId) && members.has(connection.targetId);
+    const showLabel = connection.label && (level === "near" || (orthogonal && level === "mid"));
+    return {
     id: connection.id,
     source: connection.sourceId,
     target: connection.targetId,
     type: "floating",
-    className: `edge-${connection.kind}`,
-    ...(DIRECTIONAL.has(connection.kind) ? { markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 } } : {}),
-    ...(level === "near" && connection.label ? { label: connection.label } : {}),
-    data: { kind: connection.kind },
+    className: `edge-${connection.kind} line-${connection.line ?? "solid"}${orthogonal ? " is-diagram" : ""}`,
+    ...(ends === "end" || ends === "both" ? { markerEnd: ARROW } : {}),
+    ...(ends === "start" || ends === "both" ? { markerStart: ARROW } : {}),
+    ...(showLabel ? { label: connection.label } : {}),
+    data: { kind: connection.kind, orthogonal },
     // Layers (with zIndexMode="manual"): regions 0, sub-regions 1, edges 2, cards 3. Lines never cross card text.
     zIndex: 2,
     selectable: true,
     focusable: true,
-  }));
+    };
+  });
 }
 
 /** Edge ids for `[[links]]` drawn from card text; they are not connections and cannot be selected or deleted. */

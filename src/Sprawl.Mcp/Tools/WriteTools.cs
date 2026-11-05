@@ -75,7 +75,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
     [McpServerTool(Name = "update_cards", Title = "Update cards", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Write)]
     [Authorize(Policy = "scope:canvas.write")]
-    [Description("Improve or correct existing cards: title, body (replace, or appendBody to add), kind, URL, language, emphasis. Atomic, at most 50 cards. " +
+    [Description("Improve or correct existing cards: title, body (replace, or appendBody to add), kind, URL, language, emphasis, shape. Atomic, at most 50 cards. " +
         "Read them first (get_canvas at depth=full, or get_cards) and pass expectedVersion so you never overwrite a change you have not seen. Changes are undoable by the owner.")]
     public Task<McpResult<WriteResult>> UpdateCards(
         [Description("The canvas id (cv_…).")] string canvasId,
@@ -86,7 +86,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
         {
             Map.Count(updates.Count, 50, "update");
             var intents = updates.Select(u => (Intent)new UpdateCardIntent(u.CardId, u.Title, u.Body, u.AppendBody, u.Kind is null ? null : Map.Kind(u.Kind.Value),
-                u.Url, u.Language, Map.Emphasis(u.Emphasis), Map.Tint(u.Tint))).ToList();
+                u.Url, u.Language, Map.Emphasis(u.Emphasis), Map.Tint(u.Tint), Map.Shape(u.Shape))).ToList();
             return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token));
         }, token);
 

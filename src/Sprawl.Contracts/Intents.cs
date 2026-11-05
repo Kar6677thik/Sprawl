@@ -25,10 +25,12 @@ namespace Sprawl.Contracts;
 [JsonDerivedType(typeof(UnpinIntent), "unpin")]
 [JsonDerivedType(typeof(AddSketchIntent), "addSketch")]
 [JsonDerivedType(typeof(DeleteSketchesIntent), "deleteSketches")]
+[JsonDerivedType(typeof(UpdateConnectionIntent), "updateConnection")]
+[JsonDerivedType(typeof(AddDiagramIntent), "addDiagram")]
 public abstract record Intent;
 
 /// <param name="Near">A region (ID or title) to place the new region next to.</param>
-public sealed record AddRegionIntent(string Title, string? Ref = null, string? Parent = null, string? Tint = null, string? Near = null) : Intent;
+public sealed record AddRegionIntent(string Title, string? Ref = null, string? Parent = null, string? Tint = null, string? Near = null, string? Layout = null) : Intent;
 
 /// <param name="At">Owner only: an explicit position, which makes the card manual. Relative to the region, or canvas-absolute when no region is given.</param>
 public sealed record AddCardIntent(
@@ -41,7 +43,8 @@ public sealed record AddCardIntent(
     string? Language = null,
     string? Emphasis = null,
     string? Tint = null,
-    Point? At = null) : Intent;
+    Point? At = null,
+    string? Shape = null) : Intent;
 
 public sealed record UpdateCardIntent(
     string Id,
@@ -52,16 +55,27 @@ public sealed record UpdateCardIntent(
     string? Url = null,
     string? Language = null,
     string? Emphasis = null,
-    string? Tint = null) : Intent;
+    string? Tint = null,
+    string? Shape = null) : Intent;
 
-public sealed record ConnectIntent(string From, string To, string? Kind = null, string? Label = null) : Intent;
+public sealed record ConnectIntent(string From, string To, string? Kind = null, string? Label = null, string? Line = null, string? Ends = null) : Intent;
+
+/// <summary>Change a connection in place. A label of "" clears it.</summary>
+public sealed record UpdateConnectionIntent(string Id, string? Kind = null, string? Label = null, string? Line = null, string? Ends = null) : Intent;
+
+/// <summary>
+/// A diagram from a Mermaid flowchart (<c>flowchart TD</c> / <c>LR</c>): a new diagram region holding a shape per node,
+/// a connection per edge and a sub-region per subgraph, laid out by the server. Refs <c>{Ref}:{nodeId}</c> name the nodes.
+/// </summary>
+/// <param name="Replace">When a region with this title exists, clear its shapes, groups and their connections first, so the diagram is redrawn in place.</param>
+public sealed record AddDiagramIntent(string Title, string Mermaid, string? Ref = null, string? Parent = null, string? Near = null, string? Layout = null, bool Replace = false) : Intent;
 
 /// <summary>Remove by connection <paramref name="Id"/>, or by endpoints (and optionally kind).</summary>
 public sealed record DisconnectIntent(string? Id = null, string? From = null, string? To = null, string? Kind = null) : Intent;
 
 public sealed record MoveCardsIntent(IReadOnlyList<string> Ids, string ToRegion, bool CreateRegion = false) : Intent;
 
-public sealed record UpdateRegionIntent(string Id, string? Title = null, string? Tint = null) : Intent;
+public sealed record UpdateRegionIntent(string Id, string? Title = null, string? Tint = null, string? Layout = null) : Intent;
 
 /// <param name="Parent">The new parent region, or null to make it top-level.</param>
 public sealed record NestRegionIntent(string Id, string? Parent) : Intent;

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Intent } from "../api/types";
+import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Ends, Intent, LineStyle } from "../api/types";
+import { SHAPES, ShapeIcon } from "./shapes";
 import { CardLinks } from "./CardLinks";
 import { Body, KindGlyph } from "./parts";
 
 const KINDS: CardKind[] = ["idea", "note", "question", "link", "code"];
 const CONNECTION_KINDS: ConnectionKind[] = ["relates", "leads-to", "contradicts", "example-of", "depends-on"];
+const LINES: LineStyle[] = ["solid", "dashed", "dotted", "thick"];
+const ENDS: [Ends, string][] = [["end", "→"], ["start", "←"], ["both", "↔"], ["none", "—"]];
 
 interface Props {
   doc: CanvasDocument;
@@ -72,10 +75,25 @@ function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "
             </button>
           ))}
         </div>
-        <label className="field">
+        <div className="field">
+          <span>Shape</span>
+          <div className="shape-picker" role="radiogroup" aria-label="Shape">
+            <button type="button" role="radio" aria-checked={!card.shape} className={!card.shape ? "is-on" : ""} title="A card, not a shape"
+              onClick={() => { if (card.shape) update({ shape: "none" }); }}>
+              <svg className="shape-icon" viewBox="0 0 24 18" width="24" height="18" aria-hidden="true"><path d="M3 3h18v12H3z M6 7h9 M6 10h6" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg>
+            </button>
+            {SHAPES.map(({ shape, label }) => (
+              <button key={shape} type="button" role="radio" aria-checked={card.shape === shape} className={card.shape === shape ? "is-on" : ""} title={label} aria-label={label}
+                onClick={() => { if (card.shape !== shape) update({ shape }); }}>
+                <ShapeIcon shape={shape} />
+              </button>
+            ))}
+          </div>
+        </div>
+        {(card.kind === "link" || !card.shape) && <label className="field">
           <span>URL</span>
           <input value={url} placeholder="https://…" onFocus={() => { focused.current = "url"; }} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} />
-        </label>
+        </label>}
         <div className="field">
           <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : "Notes"} <em>(markdown · [[Card]] links · #tags)</em></span>
           {editingBody || card.body.length === 0 ? (
@@ -116,17 +134,27 @@ function ConnectionRow({ doc, cardId, connection, write, onFocus }: { doc: Canva
   const outgoing = connection.sourceId === cardId;
   const otherId = outgoing ? connection.targetId : connection.sourceId;
   const other = doc.cards.find((c) => c.id === otherId)?.title ?? doc.regions.find((r) => r.id === otherId)?.title ?? otherId;
-  const changeKind = (kind: ConnectionKind) => void write([
-    { type: "disconnect", id: connection.id },
-    { type: "connect", from: connection.sourceId, to: connection.targetId, kind, ...(connection.label ? { label: connection.label } : {}) },
-  ], [connection.id]);
+  const restyle = (fields: { kind?: ConnectionKind; line?: LineStyle; ends?: Ends; label?: string }) =>
+    void write([{ type: "updateConnection", id: connection.id, ...fields }], [connection.id]);
+  const ends: Ends = connection.ends ?? (["leads-to", "depends-on", "example-of"].includes(connection.kind) ? "end" : "none");
   return (
     <li>
       <span className="connection-dir" aria-label={outgoing ? "to" : "from"}>{outgoing ? "→" : "←"}</span>
       <button type="button" className="link-button" onClick={() => onFocus(otherId)}>{other}</button>
-      <select value={connection.kind} onChange={(e) => changeKind(e.target.value as ConnectionKind)} aria-label="Connection kind">
+      <select value={connection.kind} onChange={(e) => restyle({ kind: e.target.value as ConnectionKind })} aria-label="Connection kind">
         {CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
       </select>
+      <span className="connection-style">
+        <select value={connection.line ?? "solid"} onChange={(e) => restyle({ line: e.target.value as LineStyle })} aria-label="Line style" title="Line">
+          {LINES.map((line) => <option key={line} value={line}>{line}</option>)}
+        </select>
+        <select value={ends} onChange={(e) => restyle({ ends: e.target.value as Ends })} aria-label="Arrowheads" title="Arrowheads">
+          {ENDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        <input className="connection-label" defaultValue={connection.label ?? ""} key={connection.label ?? ""} placeholder="label" maxLength={40} aria-label="Label"
+          onBlur={(e) => { const label = e.target.value.trim(); if (label !== (connection.label ?? "")) restyle({ label }); }}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+      </span>
       <button type="button" className="icon-button" aria-label="Remove connection" onClick={() => void write([{ type: "disconnect", id: connection.id }], [connection.id])}>×</button>
     </li>
   );

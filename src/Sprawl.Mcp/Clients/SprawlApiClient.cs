@@ -54,6 +54,12 @@ public sealed class SprawlApiClient(HttpClient http, IOptions<SprawlMcpOptions> 
 
     public Task<List<CardDetail>> Cards(IReadOnlyList<string> ids, CancellationToken ct) => Call<List<CardDetail>>(HttpMethod.Post, "api/v1/cards/query", new CardsQuery(ids), null, ct);
 
+    public async Task<string> Mermaid(string canvasId, string region, CancellationToken ct)
+    {
+        using var response = await Send(HttpMethod.Get, $"api/v1/canvases/{Id(canvasId)}/regions/{Uri.EscapeDataString(region)}/mermaid", null, null, ct);
+        return await Read(response, ct);
+    }
+
     public Task<ReviewQueue> Reviews(string? canvasId, int limit, CancellationToken ct) =>
         Get<ReviewQueue>($"api/v1/reviews?{Query(("canvas", canvasId), ("limit", Num(limit)))}", ct);
 

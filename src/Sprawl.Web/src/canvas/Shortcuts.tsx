@@ -16,6 +16,7 @@ export const SHORTCUTS: [string, string][] = [
   ["H", "History"],
   ["Shift H", "Replay history: slider, Space plays, arrows step"],
   ["D", "Draw: freehand sketch (1-6 colour, [ ] width, Esc to stop)"],
+  ["M", "New diagram from Mermaid (architecture, flow, flowchart)"],
   ["P", "Present the regions one by one (arrows to move, Esc to stop)"],
   ["F / Shift F", "Focus the selection / fit the canvas"],
   ["1 2 3", "Zoom out to the map / titles / bodies"],
