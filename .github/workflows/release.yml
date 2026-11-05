@@ -1,0 +1,175 @@
+# Every push to main: test, then (only for images whose inputs changed, as in Slate's workflow) publish to GHCR,
+# digest-pinned with build provenance, and roll the API out to Megatron. Docs- or test-only pushes publish nothing, so
+# they never restart the API (a restart signs the owner out). The MCP is an Orbit catalog app: its new digest goes into orbit-cloud's catalog spec and Orbit's
+# release flow, never a direct patch from here (that would show as drift in Orbit).
+#
+# Deployment is off until the repository variable SPRAWL_DEPLOY is "true" (docs/02-operations.md §13). It joins the
+# tailnet as an ephemeral tag:ci-sprawl node through GitHub OIDC (no Tailscale secret is stored), can reach only
+# Megatron's API server, and uses a token that can only update the `sprawl` Deployment (deploy/api/deployer.yaml).
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sprawl-release
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      api: ${{ steps.plan.outputs.api }}
+      mcp: ${{ steps.plan.outputs.mcp }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: plan
+        name: Select affected images
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          api=false; mcp=false
+          if [ "$EVENT" = workflow_dispatch ] || [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            api=true; mcp=true
+          else
+            while IFS= read -r path; do
+              case "$path" in
+                src/Sprawl.Contracts/*|global.json|Directory.Build.props|.dockerignore|.github/workflows/release.yml) api=true; mcp=true ;;
+                src/Sprawl.Api/*|src/Sprawl.Domain/*|src/Sprawl.Web/*|Dockerfile|samples/*) api=true ;;
+                src/Sprawl.Mcp/*|Dockerfile.mcp) mcp=true ;;
+              esac
+            done < <(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          fi
+          echo "api=$api" >> "$GITHUB_OUTPUT"; echo "mcp=$mcp" >> "$GITHUB_OUTPUT"
+          echo "Images affected: api=$api mcp=$mcp" >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: src/Sprawl.Web/package-lock.json
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+      - name: Web tests and build
+        working-directory: src/Sprawl.Web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
+      - name: .NET build and tests
+        run: |
+          dotnet restore Sprawl.slnx --locked-mode
+          dotnet build Sprawl.slnx -c Release --no-restore
+          dotnet test Sprawl.slnx -c Release --no-build --logger 'console;verbosity=minimal'
+
+  publish:
+    needs: [plan, verify]
+    if: needs.plan.outputs.api == 'true' || needs.plan.outputs.mcp == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      api: ${{ steps.build.outputs.api }}
+      mcp: ${{ steps.build.outputs.mcp }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: build
+        name: Build and push once; record immutable digests
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+          API: ${{ needs.plan.outputs.api }}
+          MCP: ${{ needs.plan.outputs.mcp }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PACKAGE_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          build() {
+            docker buildx build --platform linux/amd64 --provenance=false -f "$2" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --tag "ghcr.io/kar6677thik/$1:sha-$GITHUB_SHA" --metadata-file "$1.json" --push .
+            digest="$(python3 -c "import json,re,sys; d=json.load(open(sys.argv[1]))['containerimage.digest']; assert re.fullmatch(r'sha256:[0-9a-f]{64}', d); print(d)" "$1.json")"
+            echo "$3=$digest" >> "$GITHUB_OUTPUT"
+            echo "- \`ghcr.io/kar6677thik/$1@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          }
+          echo "### Published from \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$API" = true ]; then build sprawl Dockerfile api; fi
+          if [ "$MCP" = true ]; then build sprawl-mcp Dockerfile.mcp mcp; fi
+      - if: needs.plan.outputs.api == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/kar6677thik/sprawl
+          subject-digest: ${{ steps.build.outputs.api }}
+          push-to-registry: true
+      - if: needs.plan.outputs.mcp == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/kar6677thik/sprawl-mcp
+          subject-digest: ${{ steps.build.outputs.mcp }}
+          push-to-registry: true
+
+  deploy-api:
+    needs: [plan, publish]
+    if: vars.SPRAWL_DEPLOY == 'true' && needs.plan.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Join the tailnet (ephemeral tag:ci-sprawl, OIDC; no stored secret)
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ vars.TS_OIDC_CLIENT_ID }}
+          audience: ${{ vars.TS_OIDC_AUDIENCE }}
+          tags: tag:ci-sprawl
+          ping: ${{ vars.MEGATRON_TAILNET_IP }}
+      - name: Roll out the API
+        env:
+          SERVER: ${{ vars.MEGATRON_TAILNET_IP }}
+          CA: ${{ secrets.KUBE_CA }}
+          TOKEN: ${{ secrets.KUBE_DEPLOYER_TOKEN }}
+          IMAGE: ghcr.io/kar6677thik/sprawl@${{ needs.publish.outputs.api }}
+        run: |
+          set -euo pipefail
+          umask 077
+          dir="$(mktemp -d)"; trap 'rm -rf "$dir"' EXIT
+          printf '%s' "$CA" | base64 -d > "$dir/ca.crt"
+          # The API server's certificate names "kubernetes", not the tailnet IP: verify against that name, never skip.
+          python3 - "$dir" <<'PY'
+          import os, sys
+          d = sys.argv[1]
+          open(os.path.join(d, 'config'), 'w').write(f"""apiVersion: v1
+          kind: Config
+          clusters: [{{name: megatron, cluster: {{server: "https://{os.environ['SERVER']}:6443", certificate-authority: "{d}/ca.crt", tls-server-name: kubernetes}}}}]
+          users: [{{name: deployer, user: {{token: "{os.environ['TOKEN']}"}}}}]
+          contexts: [{{name: sprawl, context: {{cluster: megatron, user: deployer, namespace: sprawl}}}}]
+          current-context: sprawl
+          """)
+          PY
+          export KUBECONFIG="$dir/config"
+          kubectl set image deployment/sprawl "sprawl=$IMAGE"
+          kubectl rollout status deployment/sprawl --timeout=240s
+          echo "Deployed \`$IMAGE\` to Megatron (namespace sprawl)." >> "$GITHUB_STEP_SUMMARY"

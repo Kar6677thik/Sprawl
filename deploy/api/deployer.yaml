@@ -1,0 +1,47 @@
+# The identity GitHub Actions deploys with (.github/workflows/release.yml): it may update the image of the `sprawl`
+# Deployment and watch the rollout, nothing else. No Secrets, no exec, no other objects or namespaces. Manifest changes
+# (policies, Service, PVC) are still applied by hand (docs/02-operations.md §4).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sprawl-deployer
+  namespace: sprawl
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sprawl-deployer
+  namespace: sprawl
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [sprawl]
+    verbs: [get, patch, watch]
+  # `kubectl rollout status` reads the new ReplicaSet and its pods.
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sprawl-deployer
+  namespace: sprawl
+subjects:
+  - { kind: ServiceAccount, name: sprawl-deployer, namespace: sprawl }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: sprawl-deployer }
+---
+# A long-lived token for the GitHub secret KUBE_DEPLOYER_TOKEN. Rotate by deleting this Secret (the token dies),
+# re-applying, and updating the GitHub secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sprawl-deployer-token
+  namespace: sprawl
+  annotations:
+    kubernetes.io/service-account.name: sprawl-deployer
+type: kubernetes.io/service-account-token

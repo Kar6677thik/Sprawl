@@ -70,7 +70,7 @@ $ sed "s/IMAGE_DIGEST/<API_DIGEST>/" deploy/api/sprawl.yaml | kubectl apply -f -
 $ kubectl -n sprawl rollout status deploy/sprawl --timeout=150s
 ```
 
-**Tailnet.** Following orbit-cloud `deploy/tailscale.md`, add a grant and an approver for `svc:sprawl` to the policy file next to `svc:orbit`, `{ "src": ["OWNER@github"], "dst": ["svc:sprawl"], "ip": ["tcp:443"] }` and `"svc:sprawl": ["tag:megatron"]` under `autoApprovers.services`. Then:
+**Tailnet.** Following orbit-cloud `deploy/tailscale.md`, add a grant and an approver for `svc:sprawl` to the policy file next to `svc:orbit`, `{ "src": ["<your login, exactly as in the svc:auth grant>"], "dst": ["svc:sprawl"], "ip": ["tcp:443"] }` (a grant that keeps the `OWNER@github` placeholder matches nobody, and the name never resolves) and `"svc:sprawl": ["tag:megatron"]` under `autoApprovers.services`. Then:
 
 ```sh
 $ sudo tailscale serve --service=svc:sprawl --https=443 http://10.43.0.102:8080
@@ -187,6 +187,9 @@ $ kubectl -n sprawl scale deploy/sprawl --replicas=1 && kubectl -n sprawl rollou
 
 ## 11. Upgrades
 
+**The images are local only:** imported into containerd, never pushed to GHCR. If image garbage collection or a node rebuild removes one, its pod cannot restart until the tar is re-imported (§2). Keep the last released tars in `.local\images`, or push the images to GHCR (an owner decision).
+
+
 1. Ctrl+K → **Back up now**.
 2. Build (§1) and import (§2).
 3. Apply `deploy/api/sprawl.yaml` with the new `API_DIGEST`. `Recreate` means a few seconds of downtime, and the restart signs you out (cookie keys live only in memory, by design).
@@ -204,6 +207,55 @@ $ kubectl delete namespace sprawl          # deletes the PVC and the database: b
 
 To remove the MCP, the Orbit thread reverts the catalog spec and deletes `app-sprawl-mcp`. Then delete the `canvas-mcp` DNS record. Revoke the Sprawl connection from Orbit → Identity. The `canvas.*` resource can stay configured in Identity; without the MCP it is unused.
 
+## 13. Releases from GitHub Actions
+
+`.github/workflows/release.yml` runs on every push to `main`. It follows Slate's workflow, with a narrower deploy.
+- **plan:** only images whose inputs changed are rebuilt. Docs- or test-only pushes publish nothing and never restart the API, which matters because a restart signs you out.
+- **verify:** all .NET and web tests.
+- **publish:** builds once and pushes `ghcr.io/kar6677thik/sprawl[-mcp]:sha-<commit>`, then records the immutable digests and GitHub build-provenance attestations.
+- **deploy-api** (when `SPRAWL_DEPLOY` is `true`):
+  - The runner joins the tailnet as an **ephemeral `tag:ci-sprawl` node through GitHub OIDC**, so no Tailscale secret is stored in GitHub.
+  - It reaches only Megatron's API server (`MEGATRON_TAILNET_IP:6443`), verifying its certificate against the name `kubernetes`, which the certificate carries.
+  - It runs `kubectl set image` and `rollout status` with the `sprawl-deployer` token (`deploy/api/deployer.yaml`). That token can get, patch and watch only the `sprawl` Deployment, plus read its ReplicaSets and pods. It cannot read Secrets, exec into pods, delete, or touch other namespaces (checked with `kubectl auth can-i`).
+  - Slate's deploy instead SSHes in with a deploy key and runs a root script through `sudo`; Sprawl needs neither.
+
+**The MCP is never deployed from here.** It is an Orbit catalog app, so a direct patch would show as drift in Orbit. A new MCP digest goes into orbit-cloud `catalog/apps/sprawl-mcp.yaml` through a reviewed PR and Orbit's release flow; ask the Orbit Cloud thread.
+
+GitHub settings (repository `Kar6677thik/Sprawl`):
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `KUBE_DEPLOYER_TOKEN` | Token of Secret `sprawl/sprawl-deployer-token` (set from Megatron over stdin) |
+| Secret | `KUBE_CA` | `ca.crt` of the same Secret, base64 |
+| Variable | `MEGATRON_TAILNET_IP` | `100.91.115.46` |
+| Variable | `TS_OIDC_CLIENT_ID`, `TS_OIDC_AUDIENCE` | From the Tailscale trust credential below (identifiers, not secrets) |
+| Variable | `SPRAWL_DEPLOY` | `true` to enable deployment |
+
+Tailscale admin console, once:
+
+1. **Access controls:** add `"tag:ci-sprawl": ["autogroup:admin"]` under `tagOwners`, and the grant `{ "src": ["tag:ci-sprawl"], "dst": ["tag:megatron"], "ip": ["tcp:6443"] }`. That tag reaches nothing else.
+2. **Settings → Trust credentials → Add → OpenID Connect:**
+   - issuer GitHub (`https://token.actions.githubusercontent.com`)
+   - subject `repo:Kar6677thik/Sprawl:environment:production` (the deploy job runs in the `production` environment)
+   - tag `tag:ci-sprawl`
+   - scope `auth_keys` (write)
+
+   Copy the client ID and audience into the two variables.
+
+**Rotate the deployer token** by deleting Secret `sprawl-deployer-token`, re-applying `deployer.yaml`, and setting `KUBE_DEPLOYER_TOKEN` again from Megatron over stdin.
+
+The images in GHCR must be **public** (the repository already is). Neither namespace has an image pull secret, and the catalog renders none.
+
 ## Installation record
 
-Not installed yet. Record the date, digests, ClusterIPs, tunnel backup file name and acceptance results here.
+**5 November 2026: API and UI installed.**
+- **Images** (imported with `deploy/import-image.sh`, built from `e69ea1a`): API `ghcr.io/kar6677thik/sprawl@sha256:d049f60ebb98faf79ce39c65223df4fc16d5c540905f1b9980d0c89100f3dd63`, MCP `ghcr.io/kar6677thik/sprawl-mcp@sha256:cb30eaaf8e9381e63faf851de1f159b503a414d404044b464f19f84930182847`.
+- **Namespace `sprawl`:** Service `10.43.0.102`, PVC `sprawl-data` (2 Gi, bound). Secrets `sprawl-owner` (new Sprawl password and TOTP, separate from Orbit's) and `sprawl-device` (hash only). The copies on Megatron were shredded.
+- **Tailnet:** `svc:sprawl` serves `https://sprawl.tailf67d61.ts.net` (valid certificate; sign-in is password + TOTP). The first advertisement needed `tailscale serve drain/advertise svc:sprawl`, and the grant's `src` had to be the real login, not the placeholder.
+- **MCP namespace prepared:** the Orbit thread applied the catalog admission policy (the first catalog app on Megatron) and the onboarding kit for `app-sprawl-mcp`. Secret `sprawl-mcp-secrets` (`device-token`) was created there from a shredded file.
+- **Checked from Megatron:** the UI listener answers through the proxy and refuses plain HTTP; the device token works only on 8081.
+- **Pending:**
+  - the MCP catalog release: orbit-cloud PR #7 (spec with the digest) awaits the owner's merge. The Orbit thread then releases it with its bundle flow
+  - the tunnel rule (§6)
+  - the restic repository: the off-node job isn't applied until a repository is chosen; the API's nightly copies on the PVC are active
+
