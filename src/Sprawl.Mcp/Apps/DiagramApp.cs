@@ -34,6 +34,7 @@ public sealed class DiagramApp
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
   header { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px 6px; }
+  #open { margin-left: auto; font-size: 12.5px; }
   header h1 { margin: 0; font-size: 15px; font-weight: 600; }
   header span { color: var(--muted); font-size: 12px; }
   #stage { position: relative; height: 420px; overflow: hidden; cursor: grab; touch-action: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -54,7 +55,7 @@ public sealed class DiagramApp
 </style>
 </head>
 <body>
-<header><h1 id="title">Sprawl</h1><span id="sub"></span></header>
+<header><h1 id="title">Sprawl</h1><span id="sub"></span><button id="open" type="button" hidden>Open in Sprawl</button></header>
 <div id="stage" hidden><div id="canvas"></div><div class="tools"><button id="fit" type="button" title="Fit">Fit</button><button id="zin" type="button" aria-label="Zoom in">+</button><button id="zout" type="button" aria-label="Zoom out">−</button></div></div>
 <section id="walk" aria-label="Walkthrough">
   <div class="row"><select id="which" aria-label="Walkthrough"></select><span id="count"></span></div>
@@ -76,6 +77,8 @@ public sealed class DiagramApp
   const notify = (method, params) => send({ jsonrpc: "2.0", method, params });
 
   const $ = (id) => document.getElementById(id);
+  // Links open through the host (ui/open-link), and only http(s) addresses the server sent.
+  const openLink = (url) => { if (/^https?:\/\//i.test(url || "")) request("ui/open-link", { url }).catch(() => {}); };
   let view = null, walk = -1, step = 0, scale = 1, tx = 0, ty = 0;
 
   function applyTheme(theme) {
@@ -141,6 +144,8 @@ public sealed class DiagramApp
     $("title").textContent = data.title;
     $("sub").textContent = data.canvasTitle + " · v" + data.version;
     $("canvas").innerHTML = data.svg;
+    $("open").hidden = !data.url;
+    $("open").onclick = () => openLink(data.url);
     $("stage").hidden = false; $("empty").hidden = true;
     applyTheme(hostTheme);
     const walks = data.walkthroughs || [];
@@ -191,9 +196,14 @@ public sealed class DiagramApp
   // Pan and zoom.
   const stage = $("stage");
   let drag = null;
-  stage.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; drag = { x: e.clientX - tx, y: e.clientY - ty }; stage.setPointerCapture(e.pointerId); stage.classList.add("dragging"); });
+  stage.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; drag = { x: e.clientX - tx, y: e.clientY - ty, sx: e.clientX, sy: e.clientY, target: e.target }; stage.setPointerCapture(e.pointerId); stage.classList.add("dragging"); });
   stage.addEventListener("pointermove", (e) => { if (!drag) return; tx = e.clientX - drag.x; ty = e.clientY - drag.y; setTransform(); });
-  stage.addEventListener("pointerup", () => { drag = null; stage.classList.remove("dragging"); });
+  stage.addEventListener("pointerup", (e) => {
+    // A click (not a drag) on a card that links somewhere opens it.
+    const clicked = drag && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 5 && drag.target.closest && drag.target.closest("[data-href]");
+    drag = null; stage.classList.remove("dragging");
+    if (clicked) openLink(clicked.getAttribute("data-href"));
+  });
   stage.addEventListener("wheel", (e) => { e.preventDefault(); const r = stage.getBoundingClientRect(); zoom(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   $("fit").onclick = fit; $("zin").onclick = () => zoom(1.25); $("zout").onclick = () => zoom(0.8);
   $("prev").onclick = () => { if (step > 0) { step--; showStep(); } };

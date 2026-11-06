@@ -549,6 +549,7 @@ spec:
     ASPNETCORE_ENVIRONMENT: Production
     Mcp__PublicOrigin: https://canvas-mcp.karthiksurkanti.in
     Mcp__ApiBaseUrl: http://<sprawl Service ClusterIP>:8081
+    Mcp__WebAppUrl: https://sprawl.tailf67d61.ts.net   # optional: url/webUrl in results
     OAuth__Authority: https://auth.karthiksurkanti.in/
     OAuth__AuthorizationServers__0: https://auth.karthiksurkanti.in/
     OAuth__Resource: https://canvas-mcp.karthiksurkanti.in/mcp

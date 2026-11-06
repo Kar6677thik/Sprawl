@@ -25,6 +25,8 @@ spec:
     # The sprawl Service's device listener (fixed ClusterIP, deploy/api/sprawl.yaml). HTTP inside the cluster only.
     MCP__APIBASEURL: http://10.43.0.102:8081
     MCP__ALLOWEDAPIHOSTS__0: 10.43.0.102
+    # The web app's origin (tailnet-only). Tool results then carry url/webUrl that open canvases and cards in it.
+    MCP__WEBAPPURL: https://sprawl.tailf67d61.ts.net
     OAUTH__AUTHORITY: https://auth.karthiksurkanti.in/
     OAUTH__AUTHORIZATIONSERVERS__0: https://auth.karthiksurkanti.in/
     OAUTH__RESOURCE: https://canvas-mcp.karthiksurkanti.in/mcp

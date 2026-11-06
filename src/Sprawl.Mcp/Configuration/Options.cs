@@ -14,6 +14,11 @@ public sealed class SprawlMcpOptions
     public string[] AllowedApiHosts { get; set; } = ["127.0.0.1", "localhost"];
     /// <summary>Browser origins allowed to call /mcp (requests without an Origin header are not affected).</summary>
     public string[] AllowedOrigins { get; set; } = ["https://claude.ai"];
+    /// <summary>
+    /// Optional: the Sprawl web app's origin, e.g. https://sprawl.example.ts.net. When set, results carry <c>url</c> (a canvas) and
+    /// <c>webUrl</c> (a card or region) that open it in the app. Absolute HTTPS origin only; checked at startup.
+    /// </summary>
+    public string? WebAppUrl { get; set; }
     [Range(1, 120)] public int RequestTimeoutSeconds { get; set; } = 25;
     [Range(1024, 8 * 1024 * 1024)] public int MaximumResponseBytes { get; set; } = 2 * 1024 * 1024;
 }

@@ -13,7 +13,7 @@ namespace Sprawl.Mcp.Tools;
 /// <summary>Diagrams: architectures, flows and flowcharts drawn as shapes and arrows, from Mermaid or piece by piece.</summary>
 [McpServerToolType]
 [Authorize]
-public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
+public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor, WebLinks links)
 {
     private const string MermaidGuide =
         "Any Mermaid diagram works. Flowcharts ('flowchart TD|LR') become native, editable shapes and arrows laid out by the server; every other type " +
@@ -73,7 +73,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
                     s.Marks is { Count: > 0 } marks ? [.. marks.Select(m => Map.Mark(m, Name))] : null)).ToList();
                 intents.Add(new AddWalkthroughIntent(refPrefix, string.IsNullOrWhiteSpace(walkthroughTitle) ? "How it works" : walkthroughTitle, steps, Replace: replace));
             }
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, requestId), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, requestId), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "add_walkthrough", Title = "Walk through a diagram", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true)]
@@ -96,7 +96,7 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
             Map.Count(steps.Count, Limits.WalkthroughSteps, "step");
             var intent = new AddWalkthroughIntent(Text.Required(region, "region", 200), Text.Required(title, "title", Limits.RegionTitle),
                 [.. steps.Select(s => new WalkthroughStep(s.Text, s.Highlight, s.Marks is { Count: > 0 } marks ? [.. marks.Select(m => Map.Mark(m))] : null))], Replace: replace);
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([intent]), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([intent]), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "show_diagram", Title = "Show a diagram", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -110,7 +110,11 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The region id (rg_…) or title.")] string region,
         CancellationToken token = default) =>
-        executor.Run("show_diagram", () => api.View(canvasId, Text.Required(region, "region", 200), token), token);
+        executor.Run("show_diagram", async () =>
+        {
+            var view = await api.View(canvasId, Text.Required(region, "region", 200), token);
+            return view with { Url = links.Item(view.CanvasId, view.RegionId) };
+        }, token);
 
     [McpServerTool(Name = "get_diagram", Title = "Read a diagram as Mermaid", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = false)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
@@ -143,6 +147,6 @@ public sealed class DiagramTools(SprawlApiClient api, ToolExecutor executor)
         {
             Map.Count(updates.Count, Batches.MaxItems, "connection update");
             var intents = updates.Select(u => (Intent)new UpdateConnectionIntent(u.ConnectionId, u.Kind is null ? null : Map.Kind(u.Kind.Value), u.Label, Map.Line(u.Line), Map.Ends(u.Ends))).ToList();
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token), links);
         }, token);
 }
