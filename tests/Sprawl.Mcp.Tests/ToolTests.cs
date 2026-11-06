@@ -62,7 +62,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["answer_questions", "check_my_map", "expand_region", "find_gaps", "quiz_me", "review_canvas", "seed_canvas", "synthesize_region", "teach_me", "triage_inbox", "visualize"], names);
+        Assert.Equal(["answer_questions", "check_my_map", "expand_region", "find_gaps", "map_from_sources", "quiz_me", "review_canvas", "seed_canvas", "synthesize_region", "teach_me", "triage_inbox", "visualize"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",

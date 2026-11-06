@@ -82,7 +82,9 @@ public static class SvgRenderer
     {
         var tint = card.Tint is null ? "" : $" tint-{card.Tint}";
         var key = card.Emphasis == Emphases.Key ? " key" : "";
-        var sb = new StringBuilder($"<g class=\"item node{tint}{key}\" data-id=\"{card.Id}\"{(group is null ? "" : $" data-group=\"{group}\"")}>");
+        var href = card.Url is { } url && (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            ? $" data-href=\"{Esc(url)}\"" : "";
+        var sb = new StringBuilder($"<g class=\"item node{tint}{key}{(href.Length > 0 ? " linked" : "")}\" data-id=\"{card.Id}\"{(group is null ? "" : $" data-group=\"{group}\"")}{href}>");
         if (card.Shape is { } shape)
         {
             sb.Append(Outline(shape, b));
@@ -308,6 +310,7 @@ public static class SvgRenderer
         .loop-b circle, .loop-b path { stroke: var(--loop-b); } .loop-b text { fill: var(--loop-b); }
         .loop-u circle, .loop-u path { stroke: var(--stroke); } .loop-u text { fill: var(--muted); }
         .loop-arrowhead { fill: var(--stroke); }
+        .linked { cursor: pointer; } .linked .card-title { text-decoration: underline; text-decoration-color: var(--muted); }
         .item { transition: opacity 250ms ease; }
         .walking .item.dim { opacity: 0.15; }
         .walking .node.lit .shape, .walking .node.lit .card { stroke: var(--accent); stroke-width: 2.5; }

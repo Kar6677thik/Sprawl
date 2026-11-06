@@ -10,7 +10,7 @@ namespace Sprawl.Mcp.Tools;
 
 [McpServerToolType]
 [Authorize]
-public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor)
+public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor, WebLinks links)
 {
     [McpServerTool(Name = "reorganize", Title = "Reorganize a canvas", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Organize)]
@@ -29,7 +29,7 @@ public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor)
         {
             Map.Count(actions.Count, 100, "action");
             var intents = actions.Select(Map.Reorganize).ToList();
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, SkipPinned: skipPinned, CreateMissingRegions: false), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, SkipPinned: skipPinned, CreateMissingRegions: false), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "update_canvas", Title = "Update canvas details", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -50,7 +50,7 @@ public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor)
         long? expectedVersion = null,
         CancellationToken token = default) =>
         executor.Run("update_canvas", async () => WriteResult.From(await api.UpdateCanvas(canvasId,
-            new UpdateCanvasIntent(title, description, tags, addTags, removeTags, collection, clearCollection, pinned, archived), expectedVersion, token)), token);
+            new UpdateCanvasIntent(title, description, tags, addTags, removeTags, collection, clearCollection, pinned, archived), expectedVersion, token), links), token);
 
     [McpServerTool(Name = "revert_canvas", Title = "Revert a canvas", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Organize)]
@@ -62,12 +62,12 @@ public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor)
         [Description("The earlier version to return to.")] long toVersion,
         [Description("The current version (from get_canvas or get_history).")] long expectedVersion,
         CancellationToken token = default) =>
-        executor.Run("revert_canvas", async () => WriteResult.From(await api.Revert(canvasId, toVersion, expectedVersion, token)), token);
+        executor.Run("revert_canvas", async () => WriteResult.From(await api.Revert(canvasId, toVersion, expectedVersion, token), links), token);
 }
 
 [McpServerToolType]
 [Authorize]
-public sealed class AdminTools(SprawlApiClient api, ToolExecutor executor)
+public sealed class AdminTools(SprawlApiClient api, ToolExecutor executor, WebLinks links)
 {
     [McpServerTool(Name = "delete_cards", Title = "Delete cards", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Admin)]
@@ -81,7 +81,7 @@ public sealed class AdminTools(SprawlApiClient api, ToolExecutor executor)
         executor.Run("delete_cards", async () =>
         {
             Map.Count(cardIds.Count, 100, "card id");
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([new DeleteCardsIntent(cardIds)]), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([new DeleteCardsIntent(cardIds)]), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "delete_canvas", Title = "Delete a canvas", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -92,5 +92,5 @@ public sealed class AdminTools(SprawlApiClient api, ToolExecutor executor)
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The current version; required.")] long expectedVersion,
         CancellationToken token = default) =>
-        executor.Run("delete_canvas", async () => WriteResult.From(await api.Trash(canvasId, expectedVersion, token)), token);
+        executor.Run("delete_canvas", async () => WriteResult.From(await api.Trash(canvasId, expectedVersion, token), links, linked: false), token);
 }

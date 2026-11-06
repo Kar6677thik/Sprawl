@@ -178,4 +178,6 @@ public sealed record ReviewRequest(string Grade);
 public sealed record ReviewResult(string CardId, ReviewState Review);
 
 /// <summary>A region ready to show anywhere: its drawing (SVG), its Mermaid source and its walkthroughs.</summary>
-public sealed record RegionView(string CanvasId, string CanvasTitle, long Version, string RegionId, string Title, string? Layout, string Svg, string Mermaid, IReadOnlyList<Walkthrough> Walkthroughs);
+/// <param name="Url">Where the region opens in the Sprawl web app; set by the MCP server only when it knows the app's address.</param>
+public sealed record RegionView(string CanvasId, string CanvasTitle, long Version, string RegionId, string Title, string? Layout, string Svg, string Mermaid, IReadOnlyList<Walkthrough> Walkthroughs,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Url = null);

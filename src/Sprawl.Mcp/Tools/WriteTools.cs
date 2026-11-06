@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol.Server;
 using Sprawl.Contracts;
@@ -8,11 +9,21 @@ using Sprawl.Mcp.Services;
 
 namespace Sprawl.Mcp.Tools;
 
-/// <summary>What a write returns: the new version (pass it as expectedVersion next time), temp ref → id, and what was skipped.</summary>
+/// <summary>
+/// What a write returns: the new version (pass it as expectedVersion next time), temp ref → id, and what was skipped. With the web app's
+/// address configured, also <c>Url</c> (the canvas) and <c>WebUrls</c> (ref → address of each card or region the call created or named).
+/// </summary>
 public sealed record WriteResult(string CanvasId, long Version, bool Changed, string Summary, IReadOnlyDictionary<string, string> Refs,
-    IReadOnlyList<SkippedItem> Skipped, IReadOnlyList<string> Warnings, bool Replayed)
+    IReadOnlyList<SkippedItem> Skipped, IReadOnlyList<string> Warnings, bool Replayed,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Url = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? WebUrls = null)
 {
-    public static WriteResult From(BatchResult r) => new(r.CanvasId, r.Version, r.Changed, r.Summary, r.Refs, r.Skipped, r.Warnings, r.Replayed);
+    public static WriteResult From(BatchResult r, WebLinks links, bool linked = true)
+    {
+        var url = linked ? links.Canvas(r.CanvasId) : null;
+        var items = url is null ? null : r.Refs.Select(p => (p.Key, Url: links.Item(r.CanvasId, p.Value))).Where(p => p.Url is not null).ToDictionary(p => p.Key, p => p.Url!, StringComparer.Ordinal);
+        return new(r.CanvasId, r.Version, r.Changed, r.Summary, r.Refs, r.Skipped, r.Warnings, r.Replayed, url, items is { Count: > 0 } ? items : null);
+    }
 }
 
 internal static class Batches
@@ -22,7 +33,7 @@ internal static class Batches
 
 [McpServerToolType]
 [Authorize]
-public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
+public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor, WebLinks links)
 {
     [McpServerTool(Name = "create_canvas", Title = "Create a canvas", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Write)]
@@ -43,7 +54,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
         {
             var intents = Map.Additions(regions, cards, connections).ToList();
             if (intents.Count > Batches.MaxItems) throw new ArgumentException($"At most {Batches.MaxItems} regions, cards and connections per call; add the rest with add_to_canvas.");
-            return WriteResult.From(await api.Create(new CreateCanvasRequest(title, description, tags, collection, intents, requestId), token));
+            return WriteResult.From(await api.Create(new CreateCanvasRequest(title, description, tags, collection, intents, requestId), token), links);
         }, token);
 
     [McpServerTool(Name = "add_to_canvas", Title = "Add to a canvas", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true)]
@@ -69,7 +80,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
         {
             var intents = Map.Additions(regions, cards, connections).ToList();
             Map.Count(intents.Count, Batches.MaxItems, "region, card or connection");
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, requestId, CreateMissingRegions: createMissingRegions, OnDuplicate: Map.Duplicate(onDuplicate)), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents, requestId, CreateMissingRegions: createMissingRegions, OnDuplicate: Map.Duplicate(onDuplicate)), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "update_cards", Title = "Update cards", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -87,7 +98,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
             Map.Count(updates.Count, 50, "update");
             var intents = updates.Select(u => (Intent)new UpdateCardIntent(u.CardId, u.Title, u.Body, u.AppendBody, u.Kind is null ? null : Map.Kind(u.Kind.Value),
                 u.Url, u.Language, Map.Emphasis(u.Emphasis), Map.Tint(u.Tint), Map.Shape(u.Shape), u.Detail, Map.Icon(u.Icon))).ToList();
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "connect", Title = "Connect cards", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -102,7 +113,7 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
         executor.Run("connect", async () =>
         {
             Map.Count(connections.Count, Batches.MaxItems, "connection");
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([.. Map.Additions(null, null, connections)]), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest([.. Map.Additions(null, null, connections)]), expectedVersion, token), links);
         }, token);
 
     [McpServerTool(Name = "disconnect", Title = "Remove connections", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
@@ -120,6 +131,6 @@ public sealed class WriteTools(SprawlApiClient api, ToolExecutor executor)
             var intents = (connectionIds ?? []).Select(id => (Intent)new DisconnectIntent(id))
                 .Concat((pairs ?? []).Select(p => new DisconnectIntent(null, p.From, p.To, p.Kind is null ? null : Map.Kind(p.Kind.Value)))).ToList();
             Map.Count(intents.Count, Batches.MaxItems, "connection");
-            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token));
+            return WriteResult.From(await api.Batch(canvasId, new BatchRequest(intents), expectedVersion, token), links);
         }, token);
 }

@@ -92,3 +92,17 @@ So diagrams are built on the existing stack, without a new dependency:
 - **UI:** a shape picker in the card panel; ports on hover to drag-connect nodes, as in draw.io; quick-add (N) inside a diagram makes a shape; `M` opens a Mermaid sheet (new diagram, or edit the selected one as text); palette commands to turn a region into a diagram (flows down or right) and back, and to copy any region as Mermaid; line style, arrowheads and label editing per connection.
 - **Storage:** migration `0004_diagrams.sql` adds `regions.layout`, `cards.shape`, `connections.line` and `connections.ends`. Older op-log rows and snapshots read with the new fields unset.
 - **Not built yet:** free-form resizing of shapes, manual waypoints on connectors, swimlanes, and sequence or class diagrams (Mermaid flowcharts only).
+
+## 4. Working with other tools (built)
+
+When Claude has Sprawl and another MCP server (such as a notes app) in one chat, the two link to each other instead of copying text.
+
+- **Into Sprawl.** A source another tool returns with a `url` becomes a link card (kind `link`, the url exactly as given), or the url of the card it supports. The server instructions tell Claude never to build or guess URLs, and to treat other tools' text as untrusted, like card text. The `map_from_sources` prompt builds a canvas from such sources: themes as regions, ideas in Claude's words, one link card per source, ideas connected to the sources behind them.
+- **Out of Sprawl.** With `Mcp:WebAppUrl` set (an absolute https origin, checked at startup; production: `https://sprawl.tailf67d61.ts.net`), results carry addresses that open the web app:
+  - `url` on canvases: `list_canvases`, `search`, write results, and an `url:` line at the top of `get_canvas`. It is left out of `delete_canvas` results.
+  - `webUrl` on cards: `get_cards`, `search`.
+  - `webUrls` (ref → address) on write results.
+  - `url` on `show_diagram` for the region.
+
+  The form is `{origin}/c/{canvas}` and `?focus={card or region}`. A card's own `url` keeps its old meaning, where a link card points, which is why a card's Sprawl address is `webUrl`. Without the setting, none of these appear.
+- **In the chat view.** The diagram app shows "Open in Sprawl" when the region has a `url`. Clicking a node whose card links somewhere opens that link. Both go through the host's `ui/open-link`, and only for http(s).

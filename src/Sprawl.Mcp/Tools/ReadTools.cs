@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.AspNetCore.Authorization;
+using System.Text.Json.Serialization;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Sprawl.Contracts;
@@ -9,24 +10,35 @@ using Sprawl.Mcp.Services;
 
 namespace Sprawl.Mcp.Tools;
 
-/// <summary>A card as Claude sees it: content and provenance, never geometry. <c>PlacedByOwner</c> means reorganize will not move it.</summary>
+/// <summary>
+/// A card as Claude sees it: content and provenance, never geometry. <c>PlacedByOwner</c> means reorganize will not move it.
+/// <c>Url</c> is what a link card points to; <c>WebUrl</c> opens this card in Sprawl (only when the server knows the web app's address).
+/// </summary>
 public sealed record CardView(string Id, string CanvasId, string? RegionId, string? Region, string Kind, string Title, string Body, string? Url, string? Language,
     string Emphasis, string? Tint, string CreatedBy, string UpdatedBy, bool PlacedByOwner, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    IReadOnlyList<ConnectionView> Connections)
+    IReadOnlyList<ConnectionView> Connections, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WebUrl = null)
 {
-    public static CardView From(CardDetail d) => new(d.Card.Id, d.CanvasId, d.Card.RegionId, d.RegionTitle, d.Card.Kind, d.Card.Title, d.Card.Body, d.Card.Url,
+    public static CardView From(CardDetail d, WebLinks links) => new(d.Card.Id, d.CanvasId, d.Card.RegionId, d.RegionTitle, d.Card.Kind, d.Card.Title, d.Card.Body, d.Card.Url,
         d.Card.Language, d.Card.Emphasis, d.Card.Tint, d.Card.CreatedBy, d.Card.UpdatedBy, d.Card.Placement == Placements.Manual, d.Card.CreatedAt, d.Card.UpdatedAt,
-        [.. d.Connections.Select(c => new ConnectionView(c.Id, c.SourceId, c.TargetId, c.Kind, c.Label))]);
+        [.. d.Connections.Select(c => new ConnectionView(c.Id, c.SourceId, c.TargetId, c.Kind, c.Label))], links.Item(d.CanvasId, d.Card.Id));
 }
 
 public sealed record ConnectionView(string Id, string From, string To, string Kind, string? Label);
 
+/// <summary><c>Url</c> opens the canvas in the Sprawl web app (only when the server knows its address).</summary>
 public sealed record CanvasListItem(string Id, string Title, string Description, IReadOnlyList<string> Tags, string? Collection, bool Pinned, bool Archived,
-    long Version, int Cards, int Regions, int OpenQuestions, DateTimeOffset UpdatedAt);
+    long Version, int Cards, int Regions, int OpenQuestions, DateTimeOffset UpdatedAt, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Url = null);
+
+public sealed record CanvasHitView(string CanvasId, string Title, string Snippet, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Url = null);
+
+public sealed record CardHitView(string CanvasId, string CanvasTitle, string CardId, string? RegionId, string? RegionTitle, string Kind, string Title, string Snippet,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WebUrl = null);
+
+public sealed record SearchView(IReadOnlyList<CanvasHitView> Canvases, IReadOnlyList<CardHitView> Cards);
 
 [McpServerToolType]
 [Authorize]
-public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
+public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLinks links)
 {
     [McpServerTool(Name = "list_canvases", Title = "List canvases", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
@@ -42,20 +54,26 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
         executor.Run<IReadOnlyList<CanvasListItem>>("list_canvases", async () =>
         {
             var canvases = await api.ListCanvases(tag, collection, query, includeArchived, Math.Clamp(limit, 1, 100), token);
-            return [.. canvases.Select(c => new CanvasListItem(c.Id, c.Title, c.Description, c.Tags, c.Collection, c.Pinned, c.Archived, c.Version, c.CardCount, c.RegionCount, c.OpenQuestions, c.UpdatedAt))];
+            return [.. canvases.Select(c => new CanvasListItem(c.Id, c.Title, c.Description, c.Tags, c.Collection, c.Pinned, c.Archived, c.Version, c.CardCount, c.RegionCount, c.OpenQuestions, c.UpdatedAt,
+                links.Canvas(c.Id)))];
         }, token);
 
     [McpServerTool(Name = "search", Title = "Search cards", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
     [Authorize(Policy = "scope:canvas.read")]
     [Description("Full-text search over card titles, bodies and URLs, across every canvas or within one. Use it to check whether an idea already exists before adding it. Every word must match (as a prefix).")]
-    public Task<McpResult<SearchResult>> Search(
+    public Task<McpResult<SearchView>> Search(
         [Description("Words to search for.")] string query,
         [Description("Limit to one canvas (cv_…).")] string? canvasId = null,
         [Description("Limit to these card kinds.")] IReadOnlyList<CardKind>? kinds = null,
         [Description("1-50, default 20.")] int limit = 20,
         CancellationToken token = default) =>
-        executor.Run("search", () => api.Search(Text.Required(query, "query", 200), canvasId, [.. (kinds ?? []).Select(Map.Kind)], Math.Clamp(limit, 1, 50), token), token);
+        executor.Run("search", async () =>
+        {
+            var found = await api.Search(Text.Required(query, "query", 200), canvasId, [.. (kinds ?? []).Select(Map.Kind)], Math.Clamp(limit, 1, 50), token);
+            return new SearchView([.. found.Canvases.Select(c => new CanvasHitView(c.CanvasId, c.Title, c.Snippet, links.Canvas(c.CanvasId)))],
+                [.. found.Cards.Select(c => new CardHitView(c.CanvasId, c.CanvasTitle, c.CardId, c.RegionId, c.RegionTitle, c.Kind, c.Title, c.Snippet, links.Item(c.CanvasId, c.CardId)))]);
+        }, token);
 
     [McpServerTool(Name = "get_canvas", Title = "Read a canvas outline", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = false)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
@@ -74,7 +92,8 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
         var (text, error) = await executor.RunText("get_canvas", async () =>
         {
             var (outline, _) = await api.Outline(canvasId, Map.Depth(depth), region, includeConnections, Math.Clamp(maxCards, 1, 1000), token);
-            return outline;
+            // The canvas's own address leads the outline; a card's comes from get_cards or search (webUrl).
+            return links.Canvas(canvasId) is { } url ? $"url: {url}\n{outline}" : outline;
         }, token);
         return error is null
             ? new CallToolResult { Content = [new TextContentBlock { Text = text! }] }
@@ -91,7 +110,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor)
         executor.Run<IReadOnlyList<CardView>>("get_cards", async () =>
         {
             Map.Count(cardIds.Count, Limits.CardsPerQuery, "card id");
-            return [.. (await api.Cards(cardIds, token)).Select(CardView.From)];
+            return [.. (await api.Cards(cardIds, token)).Select(d => CardView.From(d, links))];
         }, token);
 
     [McpServerTool(Name = "get_card_context", Title = "A card's links, backlinks and related cards", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
