@@ -112,6 +112,9 @@ public static class SvgRenderer
             if (body.Length > 0 && b.H > 70)
                 sb.Append(Lines(body, b.X + 14, b.Y + 46, b.W - 28, "card-body", center: false, maxLines: Math.Max(1, (int)((b.H - 56) / 17))));
         }
+        // A node that opens a link (a Slate note, a canvas, a page) says so with a small arrow in its corner.
+        if (href.Length > 0)
+            sb.Append($"<path class=\"link-mark\" d=\"M{N(b.X + b.W - 15)} {N(b.Y + 6)} H{N(b.X + b.W - 7)} V{N(b.Y + 14)} M{N(b.X + b.W - 7)} {N(b.Y + 6)} L{N(b.X + b.W - 15)} {N(b.Y + 14)}\"/>");
         return sb.Append("</g>").ToString();
     }
 
@@ -310,7 +313,7 @@ public static class SvgRenderer
         .loop-b circle, .loop-b path { stroke: var(--loop-b); } .loop-b text { fill: var(--loop-b); }
         .loop-u circle, .loop-u path { stroke: var(--stroke); } .loop-u text { fill: var(--muted); }
         .loop-arrowhead { fill: var(--stroke); }
-        .linked { cursor: pointer; } .linked .card-title { text-decoration: underline; text-decoration-color: var(--muted); }
+        .linked { cursor: pointer; } .link-mark { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; } .linked .card-title { text-decoration: underline; text-decoration-color: var(--muted); }
         .item { transition: opacity 250ms ease; }
         .walking .item.dim { opacity: 0.15; }
         .walking .node.lit .shape, .walking .node.lit .card { stroke: var(--accent); stroke-width: 2.5; }

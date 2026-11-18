@@ -10,6 +10,7 @@ import { currentTheme } from "./MermaidView";
 import type { LoopBadge } from "./loops";
 import type { StepMark } from "../api/types";
 import { Icon } from "./Icon";
+import { linkLabel, linkTarget, type LinkTarget } from "./links";
 
 export const ZoomLevelContext = createContext<ZoomLevel>("mid");
 
@@ -211,6 +212,8 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
     );
   }
   const classes = ["card", `kind-${card.kind}`];
+  const link = card.kind === "link" ? linkTarget(card.url) : null;
+  if (link) classes.push(`links-${link.kind}`);
   if (card.emphasis === "key") classes.push("is-key");
   if (selected) classes.push("is-selected");
   if (fresh) classes.push("is-fresh");
@@ -225,14 +228,12 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
       {level !== "far" && (
         <>
           <header className="card-header">
-            {card.icon ? <Icon name={card.icon} size={14} className="card-icon" /> : <KindGlyph kind={card.kind} />}
+            {card.icon ? <Icon name={card.icon} size={14} className="card-icon" />
+              : link && link.kind !== "web" ? <Icon name={LINK_ICON[link.kind]} size={14} className="card-icon is-link" />
+              : <KindGlyph kind={card.kind} />}
             <h3 className="card-title">{card.title}</h3>
           </header>
-          {level === "near" && card.kind === "link" && card.url && (
-            <a className="card-url" href={card.url} target="_blank" rel="noopener noreferrer nofollow" onPointerDown={(e) => e.stopPropagation()}>
-              {safeHost(card.url)}
-            </a>
-          )}
+          {link && <LinkChip target={link} />}
           {level === "near" && (
             <div className="card-body">
               {card.kind === "code" ? (
@@ -248,8 +249,23 @@ export const CardView = memo(function CardView({ data, selected }: NodeProps<Car
   );
 });
 
-function safeHost(url: string) {
-  try { return new URL(url).host; } catch { return url; }
+const LINK_ICON = { note: "file", canvas: "layers", web: "globe" } as const;
+
+/**
+ * Where a link card points, shown from the titles zoom on: a Slate note, a Sprawl canvas or card, or a web page by host.
+ * Another app's page opens in a new tab; a canvas of this Sprawl opens here, on the card it names.
+ */
+function LinkChip({ target }: { target: LinkTarget }) {
+  const here = target.kind === "canvas" && target.here;
+  return (
+    <a className={`card-url link-${target.kind}`} href={target.url} title={target.url}
+      {...(here ? {} : { target: "_blank", rel: "noopener noreferrer nofollow" })}
+      onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <Icon name={LINK_ICON[target.kind]} size={12} />
+      <span>{linkLabel(target)}</span>
+      {!here && <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M5 2.5h4.5V7M9.5 2.5 4 8" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
+    </a>
+  );
 }
 
 /** A freehand stroke. Drawn in its own box; the box is what selection and dragging act on. */

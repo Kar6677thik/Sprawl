@@ -16,5 +16,6 @@ public sealed class LinkedNodeTests
 
         Assert.Contains("data-href=\"https://notes.test/?note=n_1&amp;x=&quot;y&quot;\"", svg);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(svg, "data-href="));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(svg, "class=\"link-mark\""));
     }
 }

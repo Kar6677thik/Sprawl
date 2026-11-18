@@ -62,7 +62,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
     {
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).Order();
-        Assert.Equal(["answer_questions", "check_my_map", "expand_region", "find_gaps", "map_from_sources", "quiz_me", "review_canvas", "seed_canvas", "synthesize_region", "teach_me", "triage_inbox", "visualize"], names);
+        Assert.Equal(["answer_questions", "check_my_map", "expand_region", "find_gaps", "map_from_sources", "quiz_me", "review_canvas", "route_questions", "seed_canvas", "synthesize_region", "teach_me", "triage_inbox", "visualize"], names);
         var (_, prompt, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
         {
             ["name"] = "expand_region",
@@ -70,6 +70,19 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
         });
         var text = prompt.GetProperty("result").GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString();
         Assert.Contains("get_canvas with region=\"Safety\"", text);
+        Assert.Contains("If Slate is connected", text);
+
+        // Open questions go to the tool that fits them, only with the owner's agreement, and never by deleting the Sprawl card.
+        var (_, routed, _) = await Rpc.Send(host.Client(), Everyday, "prompts/get", new Dictionary<string, object?>
+        {
+            ["name"] = "route_questions",
+            ["arguments"] = new Dictionary<string, object?> { ["canvas"] = "Raft" }
+        });
+        var route = routed.GetProperty("result").GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString()!;
+        Assert.Contains("Socrates add_questions", route);
+        Assert.Contains("Hey Ann add_cards", route);
+        Assert.Contains("webUrl as source", route);
+        Assert.Contains("Never delete or close the Sprawl question cards", route);
     }
 
     [Fact]
