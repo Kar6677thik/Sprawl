@@ -3,6 +3,7 @@ import type { Card, CardKind, CanvasDocument, Connection, ConnectionKind, Ends, 
 import { SHAPES, ShapeIcon } from "./shapes";
 import { Icon } from "./Icon";
 import { ICON_NAMES } from "./icons";
+import { linkLabel, linkTarget } from "./links";
 import { MermaidView } from "./MermaidView";
 import { ChartView } from "./ChartView";
 import { CardLinks } from "./CardLinks";
@@ -112,6 +113,7 @@ function CardEditor({ doc, card, write, onClose, onFocus, onTag }: Omit<Props, "
         {(card.kind === "link" || !card.shape) && <label className="field">
           <span>URL</span>
           <input value={url} placeholder="https://…" onFocus={() => { focused.current = "url"; }} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} />
+          {(() => { const target = linkTarget(url.trim()); return target && target.kind !== "web" ? <small className="field-hint">{linkLabel(target)}</small> : null; })()}
         </label>}
         <div className="field">
           <span>{card.kind === "code" ? `Code${card.language ? ` · ${card.language}` : ""}` : card.kind === "mermaid" ? "Mermaid source" : card.kind === "chart" ? "Vega-Lite spec (JSON, inline data)" : card.kind === "table" ? "Table (markdown)" : card.kind === "widget" ? "Widget (HTML, CSS, inline JS; runs sandboxed)" : "Notes"} {card.kind !== "mermaid" && card.kind !== "chart" && card.kind !== "widget" && <em>(markdown · [[Card]] links · #tags)</em>}</span>
