@@ -29,6 +29,10 @@ Both apps keep their own path style, because each app's routes already work and 
 - present only when configured;
 - copied, never built.
 
+Slate has committed to its note shape (path `/`, `note` as the only query parameter, https only). If it changes, the old shape keeps working as a redirect.
+
+A Slate note links back to Sprawl with a plain Markdown link to the canvas `url` or a card's `webUrl`, so notes stay portable. After the hub work, `get_note_links` will report those links as `kind: "external"` entries, with the address exactly as written.
+
 The web app recognises a link card's target by its shape alone, so no host name is built into this public repo (`canvas/links.ts`):
 - **Slate note:** shown with a note icon and a "Slate note" chip.
 - **Canvas or card:** a canvas icon. One on this Sprawl opens in the same tab, focused on the card.
