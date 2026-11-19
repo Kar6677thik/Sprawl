@@ -106,6 +106,9 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// Proxies whose X-Forwarded-* headers count: single addresses (cloudflared on the node) or CIDR ranges (the Hub's pods). Parsed
+// here, at startup, so a bad entry stops the boot instead of failing on the first request.
+var (trustedProxies, trustedNetworks) = Startup.ParseProxies(builder.Configuration.GetSection("Networking:TrustedProxies").Get<string[]>() ?? []);
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -114,7 +117,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Add(IPAddress.Loopback);
     options.KnownProxies.Add(IPAddress.IPv6Loopback);
-    foreach (var proxy in builder.Configuration.GetSection("Networking:TrustedProxies").Get<string[]>() ?? []) options.KnownProxies.Add(IPAddress.Parse(proxy));
+    foreach (var proxy in trustedProxies) options.KnownProxies.Add(proxy);
+    foreach (var network in trustedNetworks) options.KnownIPNetworks.Add(network);
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -206,6 +210,27 @@ namespace Sprawl.Mcp
                 throw new InvalidOperationException("Mcp:ApiBaseUrl's host is not in Mcp:AllowedApiHosts.");
             if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) throw new InvalidOperationException("Mcp:ApiBaseUrl must be http(s).");
             _ = relaxed;
+        }
+
+        /// <summary>Each entry is an IP address or a CIDR range (e.g. 10.42.0.0/16); anything else stops startup.</summary>
+        public static (List<IPAddress> Proxies, List<System.Net.IPNetwork> Networks) ParseProxies(IEnumerable<string> entries)
+        {
+            var (proxies, networks) = (new List<IPAddress>(), new List<System.Net.IPNetwork>());
+            foreach (var raw in entries)
+            {
+                var entry = raw.Trim();
+                if (entry.Contains('/'))
+                {
+                    if (!System.Net.IPNetwork.TryParse(entry, out var network))
+                        throw new InvalidOperationException($"Networking:TrustedProxies entry '{entry}' is not a valid CIDR range (e.g. 10.42.0.0/16).");
+                    networks.Add(network);
+                }
+                // Strict: IPAddress.TryParse also takes legacy short forms ("10.42.0" is 10.42.0.0), which would trust the wrong host.
+                else if (IPAddress.TryParse(entry, out var address)
+                         && (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork || address.ToString() == entry)) proxies.Add(address);
+                else throw new InvalidOperationException($"Networking:TrustedProxies entry '{entry}' is not an IP address or CIDR range.");
+            }
+            return (proxies, networks);
         }
 
         /// <summary>The web app's origin, when given: absolute HTTPS (even in Development), no credentials, path, query or fragment.</summary>
