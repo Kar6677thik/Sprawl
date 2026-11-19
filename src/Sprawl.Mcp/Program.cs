@@ -138,6 +138,14 @@ builder.Services.AddHttpClient<SprawlApiClient>(client =>
     UseCookies = false
 });
 
+// Tool results keep their nulls: the SDK's defaults omit them, but the outputSchema it generates still lists those properties as
+// required, so a canvas in no collection or a card with no url broke its own schema and strict clients rejected the whole result.
+// Fields that are present only when configured (url, webUrl, webUrls) opt out with [JsonIgnore(WhenWritingNull)], and the schema
+// marks them optional.
+var toolJson = new System.Text.Json.JsonSerializerOptions(ModelContextProtocol.McpJsonUtilities.DefaultOptions)
+{
+    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never
+};
 builder.Services.AddMcpServer(options =>
     {
         options.ServerInfo = new() { Name = "sprawl", Title = "Sprawl", Version = "0.1.0" };
@@ -145,11 +153,11 @@ builder.Services.AddMcpServer(options =>
     })
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
     .AddAuthorizationFilters()
-    .WithTools<ReadTools>()
-    .WithTools<WriteTools>()
-    .WithTools<OrganizeTools>()
-    .WithTools<AdminTools>()
-    .WithTools<DiagramTools>()
+    .WithTools<ReadTools>(toolJson)
+    .WithTools<WriteTools>(toolJson)
+    .WithTools<OrganizeTools>(toolJson)
+    .WithTools<AdminTools>(toolJson)
+    .WithTools<DiagramTools>(toolJson)
     .WithResources<Sprawl.Mcp.Apps.DiagramApp>()
     .WithPrompts<CanvasPrompts>();
 
