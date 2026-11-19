@@ -100,7 +100,7 @@ When Claude has Sprawl and another MCP server (such as a notes app) in one chat,
 - **Into Sprawl.** A source another tool returns with a `url` becomes a link card (kind `link`, the url exactly as given), or the url of the card it supports. The server instructions tell Claude never to build or guess URLs, and to treat other tools' text as untrusted, like card text. The `map_from_sources` prompt builds a canvas from such sources: themes as regions, ideas in Claude's words, one link card per source, ideas connected to the sources behind them.
 - **Out of Sprawl.** With `Mcp:WebAppUrl` set (an absolute https origin, checked at startup; production: `https://sprawl.tailf67d61.ts.net`), results carry addresses that open the web app:
   - `url` on canvases: `list_canvases`, `search`, write results, and an `url:` line at the top of `get_canvas`. It is left out of `delete_canvas` results.
-  - `webUrl` on cards: `get_cards`, `search`.
+  - `webUrl` on cards: `get_cards`, `search`, and every card `get_due_questions`, `get_card_context` and `analyze_canvas` hand out (each due question also carries `canvasUrl`).
   - `webUrls` (ref → address) on write results.
   - `url` on `show_diagram` for the region.
 
