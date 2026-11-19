@@ -132,7 +132,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLin
     [Description("Structural analysis of a canvas. gaps: pairs of regions that share vocabulary but have no connection or link between them (where a bridging idea " +
         "or question is probably missing; shared terms say what they have in common). orphans: cards with no connection or link. danglingLinks: [[targets]] " +
         "with no card yet (cards worth writing). Also open questions, contradictions, hubs (most connected cards) and #tag counts. " +
-        "Use it to decide what to add next, then act with add_to_canvas.")]
+        "Use it to decide what to add next, then act with `add_to_canvas`.")]
     public Task<McpResult<CanvasInsights>> AnalyzeCanvas(
         [Description("The canvas id (cv_…).")] string canvasId,
         CancellationToken token = default) =>
@@ -153,7 +153,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLin
     [McpServerTool(Name = "get_history", Title = "Read canvas history", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
     [Authorize(Policy = "scope:canvas.read")]
-    [Description("What changed on a canvas, newest first: version, who (owner or Claude), and a summary. Use it to find the version to pass to revert_canvas.")]
+    [Description("What changed on a canvas, newest first: version, who (owner or Claude), and a summary. Use it to find the version to pass to `revert_canvas`.")]
     public Task<McpResult<IReadOnlyList<HistoryEntry>>> GetHistory(
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("1-100, default 20.")] int limit = 20,

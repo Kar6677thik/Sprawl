@@ -14,14 +14,23 @@ public sealed class ToolNameTests(McpHost host) : IClassFixture<McpHost>
     private static readonly string[] OtherApps = ["add_questions", "add_cards", "update_question", "get_note_links", "read_note", "search_notes"];
 
     [Fact]
-    public async Task Instructions_and_prompts_backtick_every_tool_name()
+    public async Task Instructions_prompts_and_tool_descriptions_backtick_every_tool_name()
     {
         var (_, tools, _) = await Rpc.Send(host.Client(), McpHost.Token("canvas.read canvas.write canvas.organize canvas.admin"), "tools/list");
-        var names = tools.GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()!)
-            .Concat(OtherApps).Where(n => n.Contains('_')).ToList();
+        var toolList = tools.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
+        var names = toolList.Select(t => t.GetProperty("name").GetString()!).Concat(OtherApps).Where(n => n.Contains('_')).ToList();
         Assert.Contains("update_cards", names);
 
         var texts = new Dictionary<string, string> { ["server instructions"] = Instructions() };
+        // The Hub rewrites tool descriptions too, so each tool's description and every parameter description are checked.
+        foreach (var tool in toolList)
+        {
+            var name = tool.GetProperty("name").GetString()!;
+            texts[$"tool {name}"] = tool.GetProperty("description").GetString()!;
+            var parameters = new List<string>();
+            Collect(tool.GetProperty("inputSchema"), parameters);
+            texts[$"tool {name} parameters"] = string.Join("\n", parameters);
+        }
         var (_, prompts, _) = await Rpc.Send(host.Client(), Everyday, "prompts/list");
         foreach (var prompt in prompts.GetProperty("result").GetProperty("prompts").EnumerateArray())
         {
@@ -47,6 +56,18 @@ public sealed class ToolNameTests(McpHost host) : IClassFixture<McpHost>
         Assert.Contains("`heyann.add_cards`", all);
         Assert.DoesNotContain("`add_questions`", all);
         Assert.DoesNotContain("`add_cards`", all);
+    }
+
+    private static void Collect(System.Text.Json.JsonElement node, List<string> into)
+    {
+        if (node.ValueKind == System.Text.Json.JsonValueKind.Object)
+            foreach (var property in node.EnumerateObject())
+            {
+                if (property.Name == "description" && property.Value.ValueKind == System.Text.Json.JsonValueKind.String) into.Add(property.Value.GetString()!);
+                else Collect(property.Value, into);
+            }
+        else if (node.ValueKind == System.Text.Json.JsonValueKind.Array)
+            foreach (var item in node.EnumerateArray()) Collect(item, into);
     }
 
     private static string Instructions() =>
