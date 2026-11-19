@@ -69,7 +69,7 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["arguments"] = new Dictionary<string, object?> { ["canvas"] = "Raft", ["region"] = "Safety" }
         });
         var text = prompt.GetProperty("result").GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString();
-        Assert.Contains("get_canvas with region=\"Safety\"", text);
+        Assert.Contains("`get_canvas` with region=\"Safety\"", text);
         Assert.Contains("If Slate is connected", text);
 
         // Open questions go to the tool that fits them, only with the owner's agreement, and never by deleting the Sprawl card.
@@ -79,8 +79,8 @@ public sealed class ToolTests(McpHost host) : IClassFixture<McpHost>
             ["arguments"] = new Dictionary<string, object?> { ["canvas"] = "Raft" }
         });
         var route = routed.GetProperty("result").GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString()!;
-        Assert.Contains("Socrates add_questions", route);
-        Assert.Contains("Hey Ann add_cards", route);
+        Assert.Contains("`socrates.add_questions`", route);
+        Assert.Contains("`heyann.add_cards`", route);
         Assert.Contains("webUrl as source", route);
         Assert.Contains("Never delete or close the Sprawl question cards", route);
     }

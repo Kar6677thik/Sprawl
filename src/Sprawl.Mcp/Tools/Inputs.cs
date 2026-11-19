@@ -146,7 +146,7 @@ public sealed record RegionInput(
 
 public sealed record CardInput(
     [property: Description("Region for the card: a ref from this call, a region id, or a region title. A new title creates the region.")] string Region,
-    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet; mermaid: a rendered Mermaid diagram of any type (the body is the source; add_diagram is usually simpler); table: a markdown table (comparisons, trade-offs, cheat sheets), shown as wide as it needs; chart: a Vega-Lite JSON spec with inline data.values (bar, line, area, point, arc…), no URLs; widget: an interactive explorable (self-contained HTML, CSS and inline JS: sliders, toggles, a small simulation; optional first line <!-- size: 640x420 -->), run sandboxed with no network.")] CardKind Kind,
+    [property: Description("idea: a claim or insight; note: explanation; question: an open question (the canvas's frontier); link: a source (url required); code: a snippet; mermaid: a rendered Mermaid diagram of any type (the body is the source; `add_diagram` is usually simpler); table: a markdown table (comparisons, trade-offs, cheat sheets), shown as wide as it needs; chart: a Vega-Lite JSON spec with inline data.values (bar, line, area, point, arc…), no URLs; widget: an interactive explorable (self-contained HTML, CSS and inline JS: sliders, toggles, a small simulation; optional first line <!-- size: 640x420 -->), run sandboxed with no network.")] CardKind Kind,
     [property: Description("Card title, 1-120 characters. One idea per card.")] string Title,
     [property: Description("Markdown body. Keep it short (under ~600 characters) except for notes and code. Max 8000 (16000 for code).")] string? Body = null,
     [property: Description("Optional temporary id for this call (e.g. \"c1\"), for connections to cards created in the same call.")] string? Ref = null,
@@ -181,7 +181,7 @@ public sealed record CardUpdate(
     [property: Description("An icon for the shape or card, or none to remove it.")] IconName? Icon = null);
 
 public sealed record ConnectionUpdate(
-    [property: Description("The connection id (cx_…), as listed in get_canvas or get_cards.")] string ConnectionId,
+    [property: Description("The connection id (cx_…), as listed in `get_canvas` or `get_cards`.")] string ConnectionId,
     ConnectionKind? Kind = null,
     [property: Description("New label; an empty string removes it.")] string? Label = null,
     LineStyle? Line = null,
@@ -189,12 +189,12 @@ public sealed record ConnectionUpdate(
 
 public sealed record StepInput(
     [property: Description("What to say at this step: one idea, 1-3 sentences of markdown (at most 2000 characters). Say what happens and why, not what is on screen.")] string Text,
-    [property: Description("What to light up while saying it (everything else fades): card titles, sub-region titles, ids (cd_…, rg_…, cx_…), or, in add_diagram, the Mermaid node ids. Connections between two lit items light up and animate by themselves.")] IReadOnlyList<string>? Highlight = null,
+    [property: Description("What to light up while saying it (everything else fades): card titles, sub-region titles, ids (cd_…, rg_…, cx_…), or, in `add_diagram`, the Mermaid node ids. Connections between two lit items light up and animate by themselves.")] IReadOnlyList<string>? Highlight = null,
     [property: Description("Optional scenario marks for this step: restyle items to show a state of the system without copying the diagram, e.g. the broker down, " +
         "the database hot, a new cache added. Marked items are lit too. Name them as in highlight.")] IReadOnlyList<MarkInput>? Marks = null);
 
 public sealed record MarkInput(
-    [property: Description("The item to mark: a title, an id, or in add_diagram a Mermaid node id.")] string Target,
+    [property: Description("The item to mark: a title, an id, or in `add_diagram` a Mermaid node id.")] string Target,
     [property: Description("down (failed), slow (degraded, backed up), hot (the bottleneck, under load), added, removed, or changed.")] MarkState State,
     [property: Description("Optional short note shown beside the item, up to 80 characters, e.g. \"503s\" or \"queue at 40k\".")] string? Note = null);
 

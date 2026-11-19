@@ -78,3 +78,30 @@ Sprawl's `get_due_questions` and the `R` review resurface **open** question card
 3. Optionally, whether open questions in Sprawl should swap SM-2 grades for simpler choices: still open, snooze, settled. Grades like "Easy" don't mean much for a question nobody can answer yet.
 
 The hub's planned "review the open questions on this canvas" prompt would be `route_questions` followed by `answer_questions` for what stays open.
+
+## 4. Through Orbit Hub
+
+The contract is orbit-cloud `docs/17-orbit-hub.md`.
+
+- **Auth.** The Hub exchanges tokens (RFC 8693). Sprawl receives ordinary access tokens: audience its own `/mcp`, the owner's `sub`, an `act` claim naming the Hub, and scopes that are a subset of `canvas.*`. Nothing changes in Sprawl. If `OAuth:AllowedCallerIds` is ever set, it must include the Hub's client id.
+- **Networking.** The Hub reaches the catalog app inside the cluster. `Networking:TrustedProxies` takes IP addresses and CIDR ranges, so the Hub's pod range can be trusted for `X-Forwarded-Proto`:
+  - IPv4 must be written in full: `10.42.0` is refused rather than read as `10.42.0.0`;
+  - a bad entry stops startup.
+- **DiagramApp.** The Hub passes `ui://sprawl/diagram`, the tools' `_meta.ui.resourceUri`, and results' `structuredContent` and `_meta` through unchanged. The app loads nothing from the network, so it declares no CSP domains.
+- **Curated core (10 tools).** The Hub prefixes them, e.g. `sprawl_update_cards`.
+
+  | Group | Tools |
+  |---|---|
+  | Find | `list_canvases`, `search` |
+  | Read | `get_canvas`, `get_cards` |
+  | Write | `create_canvas`, `add_to_canvas`, `update_cards` |
+  | Draw | `add_diagram`, `show_diagram` |
+  | Review | `get_due_questions` |
+
+  Left out:
+  - destructive or organising tools (`delete_*`, `revert_canvas`, `reorganize`, `update_canvas`);
+  - fine-grained ones whose work the core can do (`connect` and `disconnect`, since `add_to_canvas` connects; `add_walkthrough`, since `add_diagram` carries one; `update_connections`);
+  - read-side extras (`get_card_context`, `analyze_canvas`, `get_history`, `get_diagram`).
+
+  They stay available on Sprawl's own MCP endpoint.
+- **Prompts the Hub re-exposes:** `visualize`, `map_from_sources`, `answer_questions`, `route_questions`, `teach_me`. The Hub's `review_open_questions` is `route_questions`, then `answer_questions` for what stays open.

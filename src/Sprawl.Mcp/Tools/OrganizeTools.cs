@@ -16,12 +16,12 @@ public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor, We
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Organize)]
     [Authorize(Policy = "scope:canvas.organize")]
     [Description("Restructure a canvas in one atomic batch: move cards between regions, create, rename, nest or merge regions, merge duplicate cards, delete empty regions. " +
-        "Read the canvas with get_canvas first; expectedVersion is required, so a reorganization is never based on a stale read. " +
+        "Read the canvas with `get_canvas` first; expectedVersion is required, so a reorganization is never based on a stale read. " +
         "Cards and regions the owner placed by hand are never moved: such an action fails with pinned_item unless skipPinned is true (then they are reported as skipped). " +
         "Merging cards keeps intoId, appends the others' bodies, rewires their connections and removes them. Everything is undoable by the owner.")]
     public Task<McpResult<WriteResult>> Reorganize(
         [Description("The canvas id (cv_…).")] string canvasId,
-        [Description("The version from your get_canvas read.")] long expectedVersion,
+        [Description("The version from your `get_canvas` read.")] long expectedVersion,
         [Description("1-100 actions, applied in order.")] IReadOnlyList<ReorganizeAction> actions,
         [Description("Skip, rather than fail on, items the owner placed by hand.")] bool skipPinned = false,
         CancellationToken token = default) =>
@@ -55,12 +55,12 @@ public sealed class OrganizeTools(SprawlApiClient api, ToolExecutor executor, We
     [McpServerTool(Name = "revert_canvas", Title = "Revert a canvas", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Organize)]
     [Authorize(Policy = "scope:canvas.organize")]
-    [Description("Return a canvas to the state it had at an earlier version (see get_history). This adds a new version; nothing is lost, and reverting again to the version before undoes it. " +
+    [Description("Return a canvas to the state it had at an earlier version (see `get_history`). This adds a new version; nothing is lost, and reverting again to the version before undoes it. " +
         "Use only when the owner asks, or to undo your own mistake.")]
     public Task<McpResult<WriteResult>> RevertCanvas(
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The earlier version to return to.")] long toVersion,
-        [Description("The current version (from get_canvas or get_history).")] long expectedVersion,
+        [Description("The current version (from `get_canvas` or `get_history`).")] long expectedVersion,
         CancellationToken token = default) =>
         executor.Run("revert_canvas", async () => WriteResult.From(await api.Revert(canvasId, toVersion, expectedVersion, token), links), token);
 }
@@ -72,7 +72,7 @@ public sealed class AdminTools(SprawlApiClient api, ToolExecutor executor, WebLi
     [McpServerTool(Name = "delete_cards", Title = "Delete cards", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Admin)]
     [Authorize(Policy = "scope:canvas.admin")]
-    [Description("Delete cards and their connections. Only when the owner asks you to delete; to tidy duplicates prefer reorganize with mergeCards. Revertible from history.")]
+    [Description("Delete cards and their connections. Only when the owner asks you to delete; to tidy duplicates prefer `reorganize` with mergeCards. Revertible from history.")]
     public Task<McpResult<WriteResult>> DeleteCards(
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("1-100 card ids (cd_…).")] IReadOnlyList<string> cardIds,
