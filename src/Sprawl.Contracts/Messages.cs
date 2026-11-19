@@ -100,7 +100,8 @@ public sealed record CanvasEvent(
     DateTimeOffset CreatedAt);
 
 /// <summary>A card named in an analysis: enough to show and jump to it.</summary>
-public sealed record CardRef(string Id, string Title, string Kind, string? RegionId, string? RegionTitle);
+/// <param name="WebUrl">Where the card opens in the Sprawl web app; set by the MCP server only when it knows the app's address.</param>
+public sealed record CardRef(string Id, string Title, string Kind, string? RegionId, string? RegionTitle, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? WebUrl = null);
 
 /// <param name="SharedTerms">The words (and <c>#tags</c>) the two cards have in common, most telling first.</param>
 public sealed record RelatedCard(CardRef Card, double Score, IReadOnlyList<string> SharedTerms);
@@ -168,7 +169,8 @@ public static class ReviewGrades
 /// <summary>Where one open question is in its review schedule. Review state lives outside the op log: it is not canvas content.</summary>
 public sealed record ReviewState(int Reps, double Ease, double IntervalDays, DateTimeOffset DueAt, DateTimeOffset? LastReviewedAt);
 
-public sealed record DueQuestion(string CanvasId, string CanvasTitle, CardRef Card, string Body, ReviewState Review);
+/// <param name="CanvasUrl">Where the question's canvas opens in the web app (the card's own address is <c>Card.WebUrl</c>); MCP only, when configured.</param>
+public sealed record DueQuestion(string CanvasId, string CanvasTitle, CardRef Card, string Body, ReviewState Review, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? CanvasUrl = null);
 
 /// <param name="Upcoming">The next questions to come due (soonest first), so an empty queue still shows what is next.</param>
 public sealed record ReviewQueue(int DueCount, IReadOnlyList<DueQuestion> Due, IReadOnlyList<DueQuestion> Upcoming);

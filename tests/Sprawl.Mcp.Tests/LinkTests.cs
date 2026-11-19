@@ -18,6 +18,7 @@ public sealed class LinkTests
             {
                 new { region = "s", kind = "link", title = "Replication notes", url = "https://notes.test/?note=n_42", @ref = "n" },
                 new { region = "s", kind = "idea", title = "Synchronous replicas trade latency for safety", @ref = "i" },
+                new { region = "s", kind = "question", title = "When is async replication safe enough?", @ref = "q" },
             }
         }));
         var refs = created.GetProperty("refs");
@@ -49,6 +50,19 @@ public sealed class LinkTests
 
         Assert.StartsWith($"url: {WebApp}/c/{canvasId}\n", Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId })));
 
+        // Cards handed out by the review queue, card context and canvas analysis carry their own address too.
+        var queue = Rpc.Data(await Rpc.Call(client, Everyday, "get_due_questions", new { canvasId }));
+        var question = queue.GetProperty("due").EnumerateArray().Concat(queue.GetProperty("upcoming").EnumerateArray()).First();
+        var questionId = question.GetProperty("card").GetProperty("id").GetString()!;
+        Assert.Equal($"{WebApp}/c/{canvasId}?focus={questionId}", question.GetProperty("card").GetProperty("webUrl").GetString());
+        Assert.Equal($"{WebApp}/c/{canvasId}", question.GetProperty("canvasUrl").GetString());
+        var context = Rpc.Data(await Rpc.Call(client, Everyday, "get_card_context", new { canvasId, cardId = card }));
+        Assert.Equal($"{WebApp}/c/{canvasId}?focus={card}", context.GetProperty("card").GetProperty("webUrl").GetString());
+        var insights = Rpc.Data(await Rpc.Call(client, Everyday, "analyze_canvas", new { canvasId }));
+        var orphan = insights.GetProperty("orphans")[0];
+        Assert.Equal($"{WebApp}/c/{canvasId}?focus={orphan.GetProperty("id").GetString()}", orphan.GetProperty("webUrl").GetString());
+        Assert.Equal($"{WebApp}/c/{canvasId}?focus={questionId}", insights.GetProperty("openQuestions")[0].GetProperty("webUrl").GetString());
+
         Rpc.Data(await Rpc.Call(client, Everyday, "add_diagram", new { canvasId, title = "Write path", mermaid = "flowchart LR\n  a[Primary] --> b[(Replica)]" }));
         var view = Rpc.Data(await Rpc.Call(client, Everyday, "show_diagram", new { canvasId, region = "Write path" }));
         Assert.Equal($"{WebApp}/c/{canvasId}?focus={view.GetProperty("regionId").GetString()}", view.GetProperty("url").GetString());
@@ -68,6 +82,11 @@ public sealed class LinkTests
         Assert.False(full.TryGetProperty("webUrl", out _));
         Assert.Equal("https://notes.test/?note=n_42", full.GetProperty("url").GetString());
         Assert.False(Rpc.Text(await Rpc.Call(client, Everyday, "get_canvas", new { canvasId })).StartsWith("url:", StringComparison.Ordinal));
+        var queue = Rpc.Data(await Rpc.Call(client, Everyday, "get_due_questions", new { canvasId }));
+        var question = queue.GetProperty("due").EnumerateArray().Concat(queue.GetProperty("upcoming").EnumerateArray()).First();
+        Assert.False(question.GetProperty("card").TryGetProperty("webUrl", out _));
+        Assert.False(question.TryGetProperty("canvasUrl", out _));
+        Assert.False(Rpc.Data(await Rpc.Call(client, Everyday, "get_card_context", new { canvasId, cardId = card })).GetProperty("card").TryGetProperty("webUrl", out _));
     }
 
     [Theory]

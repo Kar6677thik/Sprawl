@@ -124,7 +124,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLin
         [Description("The canvas id (cv_…).")] string canvasId,
         [Description("The card id (cd_…).")] string cardId,
         CancellationToken token = default) =>
-        executor.Run("get_card_context", () => api.Context(canvasId, cardId, token), token);
+        executor.Run("get_card_context", async () => links.Stamp(await api.Context(canvasId, cardId, token)), token);
 
     [McpServerTool(Name = "analyze_canvas", Title = "Find gaps and loose ends", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
@@ -136,7 +136,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLin
     public Task<McpResult<CanvasInsights>> AnalyzeCanvas(
         [Description("The canvas id (cv_…).")] string canvasId,
         CancellationToken token = default) =>
-        executor.Run("analyze_canvas", () => api.Insights(canvasId, token), token);
+        executor.Run("analyze_canvas", async () => links.Stamp(await api.Insights(canvasId, token)), token);
 
     [McpServerTool(Name = "get_due_questions", Title = "Open questions due for review", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
@@ -148,7 +148,7 @@ public sealed class ReadTools(SprawlApiClient api, ToolExecutor executor, WebLin
         [Description("Only this canvas (cv_…).")] string? canvasId = null,
         [Description("1-100, default 20.")] int limit = 20,
         CancellationToken token = default) =>
-        executor.Run("get_due_questions", () => api.Reviews(canvasId, Math.Clamp(limit, 1, 100), token), token);
+        executor.Run("get_due_questions", async () => links.Stamp(await api.Reviews(canvasId, Math.Clamp(limit, 1, 100), token)), token);
 
     [McpServerTool(Name = "get_history", Title = "Read canvas history", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpMeta("securitySchemes", JsonValue = ToolSecurity.Read)]
